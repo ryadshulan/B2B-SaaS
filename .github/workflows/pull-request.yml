@@ -16,7 +16,45 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: docker compose config --quiet
+      - name: Start development dependencies
+        run: docker compose up -d
+      - name: Verify development dependency health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for service in postgres redis minio; do
+            container_id="$(docker compose ps -q "$service")"
+            if [ -z "$container_id" ]; then
+              echo "No container found for $service"
+              docker compose ps
+              exit 1
+            fi
+
+            status="starting"
+            for attempt in $(seq 1 30); do
+              status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id")"
+              if [ "$status" = "healthy" ]; then
+                echo "$service is healthy"
+                break
+              fi
+              if [ "$status" = "unhealthy" ]; then
+                echo "$service became unhealthy"
+                docker compose logs "$service"
+                exit 1
+              fi
+              sleep 2
+            done
+
+            if [ "$status" != "healthy" ]; then
+              echo "$service did not become healthy (last status: $status)"
+              docker compose logs "$service"
+              exit 1
+            fi
+          done
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Stop development dependencies
+        if: always()
+        run: docker compose down -v
