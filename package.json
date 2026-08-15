@@ -10,8 +10,8 @@
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
+    "typecheck": "tsc --project tests/tsconfig.json --noEmit && turbo typecheck",
+    "test": "turbo test && pnpm test:integration && pnpm test:e2e && pnpm test:security",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:security": "vitest run --config vitest.security.config.ts"
