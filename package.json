@@ -1,0 +1,31 @@
+{
+  "name": "customer-operations-platform",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.28.1",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:security": "vitest run --config vitest.security.config.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.2",
+    "@types/node": "24.10.1",
+    "eslint": "9.39.2",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "16.5.0",
+    "prettier": "3.7.4",
+    "turbo": "2.7.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.51.0",
+    "vitest": "4.0.16"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "@customer-ops/worker", "version": "0.0.0", "private": true, "type": "module",
+  "scripts": { "dev": "tsx watch src/main.ts", "build": "tsc -p tsconfig.json", "start": "node dist/main.js", "typecheck": "tsc --noEmit", "test": "vitest run" },
+  "devDependencies": { "tsx": "4.21.0" }
+}
