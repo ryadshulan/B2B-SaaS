@@ -19,6 +19,12 @@ jobs:
           key: ${{ runner.os }}-pnpm-${{ hashFiles('package.json', 'apps/*/package.json', 'packages/*/package.json') }}
           restore-keys: ${{ runner.os }}-pnpm-
       - run: pnpm install --no-frozen-lockfile
+      - name: Capture generated lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: pnpm-lockfile
+          path: pnpm-lock.yaml
+          if-no-files-found: error
       - run: docker compose config --quiet
       - run: pnpm lint
       - run: pnpm typecheck
