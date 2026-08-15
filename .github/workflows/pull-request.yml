@@ -19,6 +19,7 @@ jobs:
           key: ${{ runner.os }}-pnpm-${{ hashFiles('package.json', 'apps/*/package.json', 'packages/*/package.json') }}
           restore-keys: ${{ runner.os }}-pnpm-
       - run: pnpm install --no-frozen-lockfile
+      - run: docker compose config --quiet
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
