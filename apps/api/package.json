@@ -1,6 +1,26 @@
 {
-  "name": "@customer-ops/api", "version": "0.0.0", "private": true,
-  "scripts": { "dev": "nest start --watch", "build": "nest build", "start": "node dist/main.js", "typecheck": "tsc --noEmit", "test": "vitest run" },
-  "dependencies": { "@nestjs/common": "11.1.9", "@nestjs/core": "11.1.9", "reflect-metadata": "0.2.2", "rxjs": "7.8.2" },
-  "devDependencies": { "@nestjs/cli": "11.0.14", "@nestjs/testing": "11.1.9" }
+  "name": "@customer-ops/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@customer-ops/config": "workspace:*",
+    "@customer-ops/logger": "workspace:*",
+    "@nestjs/common": "11.1.9",
+    "@nestjs/core": "11.1.9",
+    "@nestjs/platform-express": "11.1.9",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "11.0.14",
+    "@nestjs/testing": "11.1.9",
+    "@types/express": "5.0.6"
+  }
 }
