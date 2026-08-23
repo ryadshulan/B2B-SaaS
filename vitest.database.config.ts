@@ -1,5 +1,11 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  test: { include: ['tests/integration/database-foundation.test.ts'] },
+  test: {
+    fileParallelism: false,
+    include: [
+      'tests/database/migration-cli.test.ts',
+      'tests/integration/database-foundation.test.ts',
+    ],
+  },
 });

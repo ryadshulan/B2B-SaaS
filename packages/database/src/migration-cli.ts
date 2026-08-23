@@ -42,6 +42,11 @@ async function main(): Promise<void> {
       environment: config.environment,
       level: config.logLevel,
       ...(config.appVersion === undefined ? {} : { version: config.appVersion }),
+      destination: {
+        write(message) {
+          process.stderr.write(message);
+        },
+      },
     });
     database = createDatabase({ config: config.database, logger });
     await executeCommand(parseCommand(process.argv[2]), database, logger);
