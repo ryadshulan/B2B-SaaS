@@ -19,6 +19,7 @@ const validEnvironment: EnvironmentSource = {
   API_PORT: '3001',
   LOG_LEVEL: 'debug',
   DATABASE_URL: 'postgresql://customer_ops:test-password@localhost:5432/customer_ops',
+  REDIS_URL: 'redis://queue-user:queue-password@localhost:6379',
 };
 
 describe('runtime configuration', () => {
@@ -40,19 +41,27 @@ describe('runtime configuration', () => {
     });
   });
 
-  it('loads a valid production worker configuration without infrastructure values', () => {
+  it('loads a valid production worker configuration with safe queue defaults', () => {
     expect(
       loadWorkerConfig({
         NODE_ENV: 'production',
         APP_NAME: 'customer-operations-platform',
         LOG_LEVEL: 'warn',
         DATABASE_URL: undefined,
-        REDIS_URL: undefined,
+        REDIS_URL: 'rediss://redis.example.test:6380',
       }),
     ).toStrictEqual({
       environment: 'production',
       appName: 'customer-operations-platform',
       logLevel: 'warn',
+      queue: {
+        redisUrl: 'rediss://redis.example.test:6380',
+        prefix: 'customer-ops',
+        workerConcurrency: 5,
+        connectTimeoutMs: 5000,
+        healthTimeoutMs: 2000,
+        shutdownTimeoutMs: 15000,
+      },
     });
   });
 
@@ -114,6 +123,65 @@ describe('runtime configuration', () => {
       statementTimeoutMs: 12000,
       idleTransactionTimeoutMs: 20000,
     });
+  });
+
+  it('loads explicit Redis and queue settings for the worker', () => {
+    expect(
+      loadWorkerConfig({
+        APP_NAME: 'customer-operations-platform',
+        REDIS_URL: 'redis://localhost:6379',
+        QUEUE_PREFIX: 'customer-ops:test',
+        WORKER_CONCURRENCY: '12',
+        REDIS_CONNECT_TIMEOUT_MS: '2500',
+        REDIS_HEALTH_TIMEOUT_MS: '750',
+        WORKER_SHUTDOWN_TIMEOUT_MS: '20000',
+      }),
+    ).toMatchObject({
+      queue: {
+        redisUrl: 'redis://localhost:6379',
+        prefix: 'customer-ops:test',
+        workerConcurrency: 12,
+        connectTimeoutMs: 2500,
+        healthTimeoutMs: 750,
+        shutdownTimeoutMs: 20000,
+      },
+    });
+  });
+
+  it.each([
+    ['missing REDIS_URL', { REDIS_URL: undefined }, 'REDIS_URL'],
+    ['invalid Redis protocol', { REDIS_URL: 'http://localhost:6379' }, 'REDIS_URL'],
+    ['Redis URL without host', { REDIS_URL: 'redis:///queue' }, 'REDIS_URL'],
+    ['zero concurrency', { WORKER_CONCURRENCY: '0' }, 'WORKER_CONCURRENCY'],
+    ['oversized concurrency', { WORKER_CONCURRENCY: '101' }, 'WORKER_CONCURRENCY'],
+    ['zero connect timeout', { REDIS_CONNECT_TIMEOUT_MS: '0' }, 'REDIS_CONNECT_TIMEOUT_MS'],
+    ['oversized health timeout', { REDIS_HEALTH_TIMEOUT_MS: '30001' }, 'REDIS_HEALTH_TIMEOUT_MS'],
+    [
+      'oversized shutdown timeout',
+      { WORKER_SHUTDOWN_TIMEOUT_MS: '120001' },
+      'WORKER_SHUTDOWN_TIMEOUT_MS',
+    ],
+    ['empty prefix', { QUEUE_PREFIX: '' }, 'QUEUE_PREFIX'],
+    ['unsafe prefix', { QUEUE_PREFIX: 'customer ops\nunsafe' }, 'QUEUE_PREFIX'],
+    ['prefix with trailing control character', { QUEUE_PREFIX: 'customer-ops\n' }, 'QUEUE_PREFIX'],
+    ['oversized prefix', { QUEUE_PREFIX: 'q'.repeat(129) }, 'QUEUE_PREFIX'],
+  ])('rejects worker configuration with %s without leaking secrets', (_name, changed, field) => {
+    const redisUrl = 'redis://queue-admin:do-not-leak@private.internal:6379';
+    let thrown: unknown;
+    try {
+      loadWorkerConfig({
+        APP_NAME: 'customer-operations-platform',
+        REDIS_URL: redisUrl,
+        ...changed,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ConfigurationError);
+    expect((thrown as Error).message).toContain(field);
+    expect((thrown as Error).message).not.toContain(redisUrl);
+    expect((thrown as Error).message).not.toContain('do-not-leak');
   });
 
   it.each([
@@ -187,6 +255,12 @@ describe('local dotenv discovery', () => {
     'DB_IDLE_TIMEOUT_MS',
     'DB_STATEMENT_TIMEOUT_MS',
     'DB_IDLE_TRANSACTION_TIMEOUT_MS',
+    'REDIS_URL',
+    'QUEUE_PREFIX',
+    'WORKER_CONCURRENCY',
+    'REDIS_CONNECT_TIMEOUT_MS',
+    'REDIS_HEALTH_TIMEOUT_MS',
+    'WORKER_SHUTDOWN_TIMEOUT_MS',
   ] as const;
   let originalDirectory: string;
   let originalEnvironment: Record<(typeof configurationKeys)[number], string | undefined>;
@@ -226,7 +300,7 @@ describe('local dotenv discovery', () => {
   it('loads the repository root .env when launched from the repository root', async () => {
     await writeFile(
       join(repositoryDirectory, '.env'),
-      'APP_NAME=root-environment\nDATABASE_URL=postgresql://localhost/root_environment\n',
+      'APP_NAME=root-environment\nDATABASE_URL=postgresql://localhost/root_environment\nREDIS_URL=redis://localhost:6379\n',
     );
     process.chdir(repositoryDirectory);
 
@@ -242,7 +316,7 @@ describe('local dotenv discovery', () => {
   ])('loads the repository root .env when launched from %s', async (relativePath, loader) => {
     await writeFile(
       join(repositoryDirectory, '.env'),
-      'APP_NAME=nested-environment\nDATABASE_URL=postgresql://localhost/nested_environment\n',
+      'APP_NAME=nested-environment\nDATABASE_URL=postgresql://localhost/nested_environment\nREDIS_URL=redis://localhost:6379\n',
     );
     process.chdir(join(repositoryDirectory, relativePath));
 
@@ -270,7 +344,7 @@ describe('local dotenv discovery', () => {
   it('skips local dotenv loading in production', async () => {
     await writeFile(
       join(repositoryDirectory, '.env'),
-      'APP_NAME=local-production-environment\nDATABASE_URL=postgresql://localhost/production_environment\n',
+      'APP_NAME=local-production-environment\nDATABASE_URL=postgresql://localhost/production_environment\nREDIS_URL=redis://localhost:6379\n',
     );
     process.env.NODE_ENV = 'production';
     process.chdir(repositoryDirectory);

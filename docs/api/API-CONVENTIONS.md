@@ -9,7 +9,7 @@ Business REST routes belong below `/api/v1`. C01 does not add demonstration busi
 - `GET /health` returns exactly `{ "status": "ok" }`.
 - `GET /ready` returns `{ "status": "ready" }` with HTTP 200 while PostgreSQL is reachable, or `{ "status": "not_ready" }` with HTTP 503 while it is unavailable.
 
-`/health` is process liveness and does not depend on PostgreSQL. `/ready` performs a fresh bounded database check, exposes no connection or failure details, and recovers without an API restart. Redis remains outside readiness until its owning milestone makes it critical.
+`/health` is process liveness and does not depend on PostgreSQL. `/ready` performs a fresh bounded database check, exposes no connection or failure details, and recovers without an API restart. Redis remains outside API readiness in C03 because the API does not consume queue infrastructure.
 
 ## Request identity
 

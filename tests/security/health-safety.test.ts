@@ -70,6 +70,70 @@ describe('runtime foundation security', () => {
     ).toStrictEqual([join('packages', 'database', 'src', 'pool.ts')]);
   });
 
+  it('keeps raw Redis and BullMQ construction inside the queue package', async () => {
+    const [apiFiles, workerFiles, queueFiles] = await Promise.all([
+      findTypeScriptFiles('apps/api/src'),
+      findTypeScriptFiles('apps/worker/src'),
+      findTypeScriptFiles('packages/queue/src'),
+    ]);
+    const applicationSources = await Promise.all(
+      [...apiFiles, ...workerFiles].map(async (file) => ({
+        file,
+        source: await readFile(file, 'utf8'),
+      })),
+    );
+    const queueSources = await Promise.all(
+      queueFiles
+        .filter((file) => !file.endsWith('.test.ts'))
+        .map(async (file) => ({ file, source: await readFile(file, 'utf8') })),
+    );
+
+    expect(
+      applicationSources.filter(({ source }) => /from ['"](?:ioredis|bullmq)['"]/u.test(source)),
+    ).toStrictEqual([]);
+    expect(
+      applicationSources.filter(({ source }) =>
+        /new (?:IORedis|Redis|Queue|Worker)\s*\(/u.test(source),
+      ),
+    ).toStrictEqual([]);
+    expect(
+      queueSources.filter(({ source }) => /new Redis\s*\(/u.test(source)).map(({ file }) => file),
+    ).toStrictEqual([join('packages', 'queue', 'src', 'redis.ts')]);
+
+    const [apiPackage, workerPackage, eventsSources] = await Promise.all([
+      readFile('apps/api/package.json', 'utf8'),
+      readFile('apps/worker/package.json', 'utf8'),
+      Promise.all(
+        (await findTypeScriptFiles('packages/events/src')).map((file) => readFile(file, 'utf8')),
+      ),
+    ]);
+    expect(apiPackage).not.toMatch(/@customer-ops\/queue|bullmq|ioredis/iu);
+    expect(workerPackage).toContain('@customer-ops/queue');
+    expect(workerPackage).not.toMatch(/"(?:bullmq|ioredis)"/iu);
+    expect(eventsSources.join('\n')).not.toMatch(/bullmq|ioredis/iu);
+  });
+
+  it('never uses broad Redis flush commands and keeps cleanup test-owned', async () => {
+    const files = await Promise.all([
+      findTypeScriptFiles('packages/queue/src'),
+      findTypeScriptFiles('tests/queue'),
+    ]);
+    const contents = await Promise.all(files.flat().map((file) => readFile(file, 'utf8')));
+    const source = contents.join('\n');
+    const cleanupSource = await readFile('packages/queue/src/testing.ts', 'utf8');
+
+    expect(source).not.toMatch(/\.flushall\s*\(|\.flushdb\s*\(/iu);
+    expect(cleanupSource).toContain('isOwnedTestPrefix');
+    expect(cleanupSource).toContain('queue.obliterate');
+  });
+
+  it('does not pass job payloads into queue operational logger calls', async () => {
+    const workerSource = await readFile('packages/queue/src/worker.ts', 'utf8');
+
+    expect(workerSource).not.toMatch(/logger\?\.(?:debug|info|warn|error)\([^;]*job\.data/isu);
+    expect(workerSource).not.toMatch(/logger\?\.(?:debug|info|warn|error)\([^;]*payload/isu);
+  });
+
   it('keeps controllers outside raw database and transaction boundaries', async () => {
     const apiFiles = await findTypeScriptFiles('apps/api/src');
     const controllerFiles = apiFiles.filter((file) => file.endsWith('.controller.ts'));
@@ -143,6 +207,38 @@ describe('runtime foundation security', () => {
     expect(output).not.toContain('security-user');
     expect(output).not.toContain('security-password');
     expect(output).toContain('[REDACTED]');
+  });
+
+  it('never serializes Redis URL key variants or embedded credentials', () => {
+    const destination = new PassThrough();
+    let output = '';
+    destination.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8');
+    });
+    const logger = createLogger({
+      service: 'redis-security-test',
+      environment: 'test',
+      level: 'info',
+      destination,
+    });
+    const redisUrl =
+      'rediss://redis-user:redis-password@private.internal:6380?password=query-password';
+
+    logger.error(
+      {
+        REDIS_URL: redisUrl,
+        redis_url: redisUrl,
+        nested: { redisUrl, credentials: { password: 'nested-password' } },
+      },
+      `redisUrl=${redisUrl}`,
+    );
+
+    expect(output).toContain('[REDACTED]');
+    expect(output).not.toContain(redisUrl);
+    expect(output).not.toContain('redis-user');
+    expect(output).not.toContain('redis-password');
+    expect(output).not.toContain('query-password');
+    expect(output).not.toContain('nested-password');
   });
 
   it('returns minimal health and readiness responses without infrastructure data', async () => {

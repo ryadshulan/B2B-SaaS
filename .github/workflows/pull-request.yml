@@ -11,6 +11,8 @@ jobs:
       APP_NAME: customer-operations-platform
       LOG_LEVEL: info
       DATABASE_URL: postgresql://customer_ops:local_development_only@127.0.0.1:5432/customer_ops
+      REDIS_URL: redis://127.0.0.1:6379
+      QUEUE_PREFIX: customer-ops-ci
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -64,6 +66,7 @@ jobs:
           pnpm db:migrate:down
           pnpm db:migrate:latest
       - run: pnpm test:database
+      - run: pnpm test:queue
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

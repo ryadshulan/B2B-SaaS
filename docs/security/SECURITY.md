@@ -8,6 +8,10 @@ Structured metadata is recursively sanitized before logging. Common credential h
 
 Database access is obtained only through `@customer-ops/database`. Applications and controllers do not instantiate `pg` pools, log SQL or bound parameters, or receive connection strings. Database health and migration failures log only fixed events, duration, operation, direction, counts, migration names, and safe error codes. Readiness responses contain status only.
 
+Redis and BullMQ access is obtained only through `@customer-ops/queue`. The API does not consume Redis in C03, and the worker does not instantiate raw clients. Redis URLs, usernames, passwords, query credentials, raw errors, and job payloads are never logged. Queue operational records contain only bounded queue/job identifiers, attempt, duration, event, and safe error code fields. Unknown job names are sanitized before logging and unknown payloads are never included. Job payloads must contain no credentials, tokens, large blobs, or unnecessary customer content.
+
+Redis integration tests use cryptographically unique `customer-ops:test:<uuid>` prefixes. Cleanup refuses any prefix that does not match the test-owned form and obliterates only known queues within that prefix. `FLUSHALL`, `FLUSHDB`, and arbitrary key deletion are prohibited even on localhost.
+
 Future tenant-owned tables must include `workspace_id`, and tenant repositories must require explicit workspace scope from trusted authenticated application context. A frontend-supplied workspace ID is never authorization. Unscoped tenant `findById(id)` contracts are prohibited; PostgreSQL row-level security will add defense in depth when tenant schema is introduced.
 
 Request IDs are always generated internally. Correlation IDs are strictly bounded and character-validated to prevent control-character or log injection. Neither identifier establishes identity, authorization, workspace scope, or RBAC.

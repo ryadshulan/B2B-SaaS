@@ -1,21 +1,27 @@
 {
-  "name": "@customer-ops/worker",
+  "name": "@customer-ops/queue",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "default": "./dist/testing.js"
+    }
+  },
   "scripts": {
-    "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run src"
   },
   "dependencies": {
     "@customer-ops/config": "workspace:*",
     "@customer-ops/logger": "workspace:*",
-    "@customer-ops/queue": "workspace:*"
-  },
-  "devDependencies": {
-    "tsx": "4.21.0"
+    "bullmq": "6.2.0",
+    "ioredis": "6.0.0"
   }
 }
