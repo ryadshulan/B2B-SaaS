@@ -6,14 +6,17 @@ import { createLogger, type LogLevel, type StructuredLogger } from './structured
 interface CapturedLogger {
   logger: StructuredLogger;
   records: Array<Record<string, unknown>>;
+  serializedOutput: string[];
 }
 
 function captureLogger(level: Exclude<LogLevel, 'fatal'> = 'debug'): CapturedLogger {
   const destination = new PassThrough();
   const records: Array<Record<string, unknown>> = [];
+  const serializedOutput: string[] = [];
   destination.on('data', (chunk: Buffer) => {
     for (const line of chunk.toString('utf8').trim().split('\n')) {
       if (line !== '') {
+        serializedOutput.push(line);
         records.push(JSON.parse(line) as Record<string, unknown>);
       }
     }
@@ -27,6 +30,7 @@ function captureLogger(level: Exclude<LogLevel, 'fatal'> = 'debug'): CapturedLog
       destination,
     }),
     records,
+    serializedOutput,
   };
 }
 
@@ -121,23 +125,84 @@ describe('structured logger', () => {
     expect(JSON.stringify(records[0])).not.toContain('storage-secret');
   });
 
+  it('redacts camelCase, PascalCase, and mixed-style credential keys in serialized output', () => {
+    const { logger, records, serializedOutput } = captureLogger();
+    const secretValues = [
+      'access-value',
+      'refresh-value',
+      'api-key-value',
+      'client-secret-value',
+      'database-url-value',
+      's3-secret-value',
+      'meta-access-value',
+      'meta-app-value',
+      'authorization-value',
+    ];
+
+    logger.info({
+      accessToken: secretValues[0],
+      safeCamelCaseMetadata: 'customer-sync-completed',
+      nestedProvider: {
+        refreshToken: secretValues[1],
+        credentials: {
+          apiKey: secretValues[2],
+          clientSecret: secretValues[3],
+          databaseUrl: secretValues[4],
+          s3SecretKey: secretValues[5],
+          MetaAccessToken: secretValues[6],
+          'meta-App_secret': secretValues[7],
+          authorizationToken: secretValues[8],
+        },
+      },
+    });
+
+    expect(records[0]).toMatchObject({
+      accessToken: '[REDACTED]',
+      safeCamelCaseMetadata: 'customer-sync-completed',
+      nestedProvider: {
+        refreshToken: '[REDACTED]',
+        credentials: {
+          apiKey: '[REDACTED]',
+          clientSecret: '[REDACTED]',
+          databaseUrl: '[REDACTED]',
+          s3SecretKey: '[REDACTED]',
+          MetaAccessToken: '[REDACTED]',
+          'meta-App_secret': '[REDACTED]',
+          authorizationToken: '[REDACTED]',
+        },
+      },
+    });
+
+    const output = serializedOutput.join('\n');
+    for (const secretValue of secretValues) {
+      expect(output).not.toContain(secretValue);
+    }
+  });
+
   it('serializes errors while redacting sensitive properties and message credentials', () => {
     const { logger, records } = captureLogger();
-    const error = Object.assign(new Error('request failed with token=private-token'), {
-      access_token: 'private-token',
-      safeCode: 'UPSTREAM_FAILURE',
-    });
+    const error = Object.assign(
+      new Error('request failed with token=private-token clientSecret=private-client-secret'),
+      {
+        access_token: 'private-token',
+        accessToken: 'private-access-token',
+        safeCode: 'UPSTREAM_FAILURE',
+      },
+    );
     logger.error({ error }, 'Failed safely');
 
     expect(records[0]).toMatchObject({
       error: {
         type: 'Error',
-        message: 'request failed with token=[REDACTED]',
+        message: 'request failed with token=[REDACTED] clientSecret=[REDACTED]',
         access_token: '[REDACTED]',
+        accessToken: '[REDACTED]',
         safeCode: 'UPSTREAM_FAILURE',
       },
     });
     expect(JSON.stringify(records[0])).not.toContain('private-token');
+    expect(JSON.stringify(records[0])).not.toContain('private-client-secret');
+    expect(JSON.stringify(records[0])).not.toContain('private-access-token');
     expect((records[0]?.error as Record<string, unknown>).stack).toEqual(expect.any(String));
   });
 });

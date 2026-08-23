@@ -23,7 +23,12 @@ const sensitiveKeys = new Set([
 ]);
 
 function normalizeKey(key: string): string {
-  return key.toLowerCase().replaceAll('-', '_');
+  return key
+    .replace(/([a-z\d])([A-Z])/gu, '$1_$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/gu, '$1_$2')
+    .replace(/[^A-Za-z\d]+/gu, '_')
+    .replace(/^_+|_+$/gu, '')
+    .toLowerCase();
 }
 
 function isSensitiveKey(key: string): boolean {
@@ -39,7 +44,7 @@ function redactSensitiveText(value: string): string {
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/giu, 'Bearer [REDACTED]')
     .replace(/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+@/giu, '$1[REDACTED]@')
     .replace(
-      /((?:password|password_hash|access_token|refresh_token|token|secret|api_key|api_secret|app_secret|database_url|redis_url|s3_secret_key)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu,
+      /((?:password(?:[_-]?hash)?|access[_-]?token|refresh[_-]?token|token|secret|api[_-]?(?:key|secret)|app[_-]?secret|database[_-]?url|redis[_-]?url|s3[_-]?secret[_-]?key)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu,
       '$1[REDACTED]',
     );
 }

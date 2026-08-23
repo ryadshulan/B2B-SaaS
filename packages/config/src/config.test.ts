@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ConfigurationError,
   loadApiConfig,
+  loadApiConfigFromEnvironment,
   loadWorkerConfig,
+  loadWorkerConfigFromEnvironment,
   type EnvironmentSource,
 } from './index';
 
@@ -91,5 +96,97 @@ describe('runtime configuration', () => {
 
     expect(config.otelExporterOtlpEndpoint).toBe('https://otel.example.test/v1/traces');
     expect(config).not.toHaveProperty('UNUSED_VALUE');
+  });
+});
+
+describe('local dotenv discovery', () => {
+  const configurationKeys = [
+    'NODE_ENV',
+    'APP_NAME',
+    'APP_VERSION',
+    'API_PORT',
+    'LOG_LEVEL',
+    'OTEL_EXPORTER_OTLP_ENDPOINT',
+  ] as const;
+  let originalDirectory: string;
+  let originalEnvironment: Record<(typeof configurationKeys)[number], string | undefined>;
+  let temporaryDirectory: string;
+  let repositoryDirectory: string;
+
+  beforeEach(async () => {
+    originalDirectory = process.cwd();
+    originalEnvironment = Object.fromEntries(
+      configurationKeys.map((key) => [key, process.env[key]]),
+    ) as Record<(typeof configurationKeys)[number], string | undefined>;
+    temporaryDirectory = await mkdtemp(join(tmpdir(), 'customer-ops-config-'));
+    repositoryDirectory = join(temporaryDirectory, 'parent', 'repository');
+    await mkdir(join(repositoryDirectory, 'apps', 'api'), { recursive: true });
+    await mkdir(join(repositoryDirectory, 'apps', 'worker'), { recursive: true });
+    await writeFile(join(repositoryDirectory, 'pnpm-workspace.yaml'), 'packages:\n  - apps/*\n');
+
+    for (const key of configurationKeys) {
+      delete process.env[key];
+    }
+    process.env.NODE_ENV = 'test';
+  });
+
+  afterEach(async () => {
+    process.chdir(originalDirectory);
+    for (const key of configurationKeys) {
+      const originalValue = originalEnvironment[key];
+      if (originalValue === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalValue;
+      }
+    }
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  });
+
+  it('loads the repository root .env when launched from the repository root', async () => {
+    await writeFile(join(repositoryDirectory, '.env'), 'APP_NAME=root-environment\n');
+    process.chdir(repositoryDirectory);
+
+    expect(loadApiConfigFromEnvironment()).toMatchObject({
+      environment: 'test',
+      appName: 'root-environment',
+    });
+  });
+
+  it.each([
+    ['apps/api', loadApiConfigFromEnvironment],
+    ['apps/worker', loadWorkerConfigFromEnvironment],
+  ])('loads the repository root .env when launched from %s', async (relativePath, loader) => {
+    await writeFile(join(repositoryDirectory, '.env'), 'APP_NAME=nested-environment\n');
+    process.chdir(join(repositoryDirectory, relativePath));
+
+    expect(loader()).toMatchObject({
+      environment: 'test',
+      appName: 'nested-environment',
+    });
+  });
+
+  it('does not load an environment file when the repository contains none', () => {
+    process.chdir(join(repositoryDirectory, 'apps', 'api'));
+
+    expect(() => loadApiConfigFromEnvironment()).toThrowError(ConfigurationError);
+    expect(process.env.APP_NAME).toBeUndefined();
+  });
+
+  it('does not load a parent environment file outside the repository boundary', async () => {
+    await writeFile(join(temporaryDirectory, 'parent', '.env'), 'APP_NAME=external-environment\n');
+    process.chdir(join(repositoryDirectory, 'apps', 'worker'));
+
+    expect(() => loadWorkerConfigFromEnvironment()).toThrowError(ConfigurationError);
+    expect(process.env.APP_NAME).toBeUndefined();
+  });
+
+  it('skips local dotenv loading in production', async () => {
+    await writeFile(join(repositoryDirectory, '.env'), 'APP_NAME=local-production-environment\n');
+    process.env.NODE_ENV = 'production';
+    process.chdir(repositoryDirectory);
+
+    expect(() => loadApiConfigFromEnvironment()).toThrowError(ConfigurationError);
+    expect(process.env.APP_NAME).toBeUndefined();
   });
 });

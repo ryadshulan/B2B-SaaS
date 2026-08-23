@@ -2,7 +2,7 @@
 
 ## Configuration
 
-`@customer-ops/config` is the supported runtime configuration boundary for the API and worker. Its loaders accept explicit environment records for deterministic tests. Process-facing loaders may read the nearest `.env` during development and test; production never loads a local dotenv file.
+`@customer-ops/config` is the supported runtime configuration boundary for the API and worker. Its loaders accept explicit environment records for deterministic tests. Process-facing loaders may read the nearest `.env` during development and test, but discovery stops at the repository boundary identified by `.git` or `pnpm-workspace.yaml`; production never loads a local dotenv file.
 
 Current variables are:
 

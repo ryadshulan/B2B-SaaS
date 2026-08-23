@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { dirname, join, parse } from 'node:path';
+import { dirname, join, parse, resolve } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { z, type ZodError } from 'zod';
 
@@ -100,16 +100,37 @@ export function loadWorkerConfig(environment: EnvironmentSource): WorkerConfig {
   return toRuntimeConfig(parseConfig(workerSchema, environment));
 }
 
-function findLocalEnvironmentFile(startDirectory: string): string | undefined {
-  let currentDirectory = startDirectory;
+function findRepositoryRoot(startDirectory: string): string | undefined {
+  let currentDirectory = resolve(startDirectory);
   const root = parse(currentDirectory).root;
 
+  while (true) {
+    if (
+      existsSync(join(currentDirectory, '.git')) ||
+      existsSync(join(currentDirectory, 'pnpm-workspace.yaml'))
+    ) {
+      return currentDirectory;
+    }
+    if (currentDirectory === root) {
+      return undefined;
+    }
+    currentDirectory = dirname(currentDirectory);
+  }
+}
+
+function findLocalEnvironmentFile(startDirectory: string): string | undefined {
+  const repositoryRoot = findRepositoryRoot(startDirectory);
+  if (repositoryRoot === undefined) {
+    return undefined;
+  }
+
+  let currentDirectory = resolve(startDirectory);
   while (true) {
     const candidate = join(currentDirectory, '.env');
     if (existsSync(candidate)) {
       return candidate;
     }
-    if (currentDirectory === root) {
+    if (currentDirectory === repositoryRoot) {
       return undefined;
     }
     currentDirectory = dirname(currentDirectory);
