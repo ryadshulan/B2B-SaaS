@@ -6,6 +6,7 @@ import {
   ConfigurationError,
   loadApiConfig,
   loadApiConfigFromEnvironment,
+  loadDatabaseConfig,
   loadWorkerConfig,
   loadWorkerConfigFromEnvironment,
   type EnvironmentSource,
@@ -17,6 +18,7 @@ const validEnvironment: EnvironmentSource = {
   APP_VERSION: '1.2.3',
   API_PORT: '3001',
   LOG_LEVEL: 'debug',
+  DATABASE_URL: 'postgresql://customer_ops:test-password@localhost:5432/customer_ops',
 };
 
 describe('runtime configuration', () => {
@@ -27,6 +29,14 @@ describe('runtime configuration', () => {
       appVersion: '1.2.3',
       port: 3001,
       logLevel: 'debug',
+      database: {
+        url: 'postgresql://customer_ops:test-password@localhost:5432/customer_ops',
+        maxConnections: 10,
+        connectionTimeoutMs: 5000,
+        idleTimeoutMs: 30000,
+        statementTimeoutMs: 15000,
+        idleTransactionTimeoutMs: 30000,
+      },
     });
   });
 
@@ -47,11 +57,24 @@ describe('runtime configuration', () => {
   });
 
   it('applies safe runtime defaults', () => {
-    expect(loadApiConfig({ APP_NAME: 'customer-operations-platform' })).toStrictEqual({
+    expect(
+      loadApiConfig({
+        APP_NAME: 'customer-operations-platform',
+        DATABASE_URL: 'postgres://localhost/customer_ops',
+      }),
+    ).toStrictEqual({
       environment: 'development',
       appName: 'customer-operations-platform',
       port: 3001,
       logLevel: 'info',
+      database: {
+        url: 'postgres://localhost/customer_ops',
+        maxConnections: 10,
+        connectionTimeoutMs: 5000,
+        idleTimeoutMs: 30000,
+        statementTimeoutMs: 15000,
+        idleTransactionTimeoutMs: 30000,
+      },
     });
   });
 
@@ -61,10 +84,61 @@ describe('runtime configuration', () => {
     ['API_PORT below range', { ...validEnvironment, API_PORT: '0' }, 'API_PORT'],
     ['API_PORT above range', { ...validEnvironment, API_PORT: '65536' }, 'API_PORT'],
     ['invalid LOG_LEVEL', { ...validEnvironment, LOG_LEVEL: 'verbose' }, 'LOG_LEVEL'],
+    ['missing DATABASE_URL', { ...validEnvironment, DATABASE_URL: undefined }, 'DATABASE_URL'],
+    [
+      'invalid DATABASE_URL protocol',
+      { ...validEnvironment, DATABASE_URL: 'mysql://localhost/customer_ops' },
+      'DATABASE_URL',
+    ],
     ['missing APP_NAME', { NODE_ENV: 'test', API_PORT: '3001' }, 'APP_NAME'],
   ])('rejects %s', (_name, environment, expectedField) => {
     expect(() => loadApiConfig(environment)).toThrowError(ConfigurationError);
     expect(() => loadApiConfig(environment)).toThrowError(expectedField);
+  });
+
+  it('loads explicit database pool settings', () => {
+    expect(
+      loadDatabaseConfig({
+        DATABASE_URL: 'postgresql://localhost/customer_ops',
+        DB_POOL_MAX: '7',
+        DB_CONNECTION_TIMEOUT_MS: '2500',
+        DB_IDLE_TIMEOUT_MS: '45000',
+        DB_STATEMENT_TIMEOUT_MS: '12000',
+        DB_IDLE_TRANSACTION_TIMEOUT_MS: '20000',
+      }),
+    ).toStrictEqual({
+      url: 'postgresql://localhost/customer_ops',
+      maxConnections: 7,
+      connectionTimeoutMs: 2500,
+      idleTimeoutMs: 45000,
+      statementTimeoutMs: 12000,
+      idleTransactionTimeoutMs: 20000,
+    });
+  });
+
+  it.each([
+    ['DB_POOL_MAX is zero', 'DB_POOL_MAX', '0'],
+    ['DB_POOL_MAX is negative', 'DB_POOL_MAX', '-1'],
+    ['DB_POOL_MAX is oversized', 'DB_POOL_MAX', '101'],
+    ['connection timeout is zero', 'DB_CONNECTION_TIMEOUT_MS', '0'],
+    ['idle timeout is negative', 'DB_IDLE_TIMEOUT_MS', '-1'],
+    ['statement timeout is oversized', 'DB_STATEMENT_TIMEOUT_MS', '300001'],
+    ['idle transaction timeout is zero', 'DB_IDLE_TRANSACTION_TIMEOUT_MS', '0'],
+  ])('rejects %s', (_name, field, value) => {
+    const databaseUrl = 'postgresql://admin:configuration-secret@localhost/customer_ops';
+    const environment = { DATABASE_URL: databaseUrl, [field]: value };
+
+    let thrown: unknown;
+    try {
+      loadDatabaseConfig(environment);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ConfigurationError);
+    expect((thrown as Error).message).toContain(field);
+    expect((thrown as Error).message).not.toContain(databaseUrl);
+    expect((thrown as Error).message).not.toContain('configuration-secret');
   });
 
   it('does not include unrelated environment values or secrets in validation errors', () => {
@@ -107,6 +181,12 @@ describe('local dotenv discovery', () => {
     'API_PORT',
     'LOG_LEVEL',
     'OTEL_EXPORTER_OTLP_ENDPOINT',
+    'DATABASE_URL',
+    'DB_POOL_MAX',
+    'DB_CONNECTION_TIMEOUT_MS',
+    'DB_IDLE_TIMEOUT_MS',
+    'DB_STATEMENT_TIMEOUT_MS',
+    'DB_IDLE_TRANSACTION_TIMEOUT_MS',
   ] as const;
   let originalDirectory: string;
   let originalEnvironment: Record<(typeof configurationKeys)[number], string | undefined>;
@@ -144,7 +224,10 @@ describe('local dotenv discovery', () => {
   });
 
   it('loads the repository root .env when launched from the repository root', async () => {
-    await writeFile(join(repositoryDirectory, '.env'), 'APP_NAME=root-environment\n');
+    await writeFile(
+      join(repositoryDirectory, '.env'),
+      'APP_NAME=root-environment\nDATABASE_URL=postgresql://localhost/root_environment\n',
+    );
     process.chdir(repositoryDirectory);
 
     expect(loadApiConfigFromEnvironment()).toMatchObject({
@@ -157,7 +240,10 @@ describe('local dotenv discovery', () => {
     ['apps/api', loadApiConfigFromEnvironment],
     ['apps/worker', loadWorkerConfigFromEnvironment],
   ])('loads the repository root .env when launched from %s', async (relativePath, loader) => {
-    await writeFile(join(repositoryDirectory, '.env'), 'APP_NAME=nested-environment\n');
+    await writeFile(
+      join(repositoryDirectory, '.env'),
+      'APP_NAME=nested-environment\nDATABASE_URL=postgresql://localhost/nested_environment\n',
+    );
     process.chdir(join(repositoryDirectory, relativePath));
 
     expect(loader()).toMatchObject({
@@ -182,7 +268,10 @@ describe('local dotenv discovery', () => {
   });
 
   it('skips local dotenv loading in production', async () => {
-    await writeFile(join(repositoryDirectory, '.env'), 'APP_NAME=local-production-environment\n');
+    await writeFile(
+      join(repositoryDirectory, '.env'),
+      'APP_NAME=local-production-environment\nDATABASE_URL=postgresql://localhost/production_environment\n',
+    );
     process.env.NODE_ENV = 'production';
     process.chdir(repositoryDirectory);
 

@@ -42,7 +42,11 @@ function isSensitiveKey(key: string): boolean {
 function redactSensitiveText(value: string): string {
   return value
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/giu, 'Bearer [REDACTED]')
-    .replace(/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+@/giu, '$1[REDACTED]@')
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^/\s@]+@/giu, '$1[REDACTED]@')
+    .replace(
+      /([?&](?:user(?:name)?|password|pass|sslpassword|token|secret|api[_-]?(?:key|secret))=)[^&#\s]+/giu,
+      '$1[REDACTED]',
+    )
     .replace(
       /((?:password(?:[_-]?hash)?|access[_-]?token|refresh[_-]?token|token|secret|api[_-]?(?:key|secret)|app[_-]?secret|database[_-]?url|redis[_-]?url|s3[_-]?secret[_-]?key)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/giu,
       '$1[REDACTED]',

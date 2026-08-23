@@ -7,9 +7,9 @@ The API uses REST for request/response operations and will use WebSockets for re
 Business REST routes belong below `/api/v1`. C01 does not add demonstration business routes. Operational endpoints are deliberately unversioned and are excluded from the global prefix:
 
 - `GET /health` returns exactly `{ "status": "ok" }`.
-- `GET /ready` returns exactly `{ "status": "ready" }` after configuration validation and application bootstrap.
+- `GET /ready` returns `{ "status": "ready" }` with HTTP 200 while PostgreSQL is reachable, or `{ "status": "not_ready" }` with HTTP 503 while it is unavailable.
 
-Readiness has no database or Redis check in C01 because those clients do not exist. C02 and later infrastructure milestones must extend readiness when a new dependency becomes critical to serving traffic.
+`/health` is process liveness and does not depend on PostgreSQL. `/ready` performs a fresh bounded database check, exposes no connection or failure details, and recovers without an API restart. Redis remains outside readiness until its owning milestone makes it critical.
 
 ## Request identity
 

@@ -10,6 +10,7 @@ describe('API runtime integration', () => {
 
   beforeEach(() => {
     api.records.length = 0;
+    api.database.setHealthy(true);
   });
 
   afterAll(async () => {
@@ -61,5 +62,29 @@ describe('API runtime integration', () => {
     const response = await fetch(`${api.baseUrl}/api/v1/health`);
 
     expect(response.status).toBe(404);
+  });
+
+  it('reports database failure and recovery through readiness without affecting liveness', async () => {
+    api.database.setHealthy(false);
+
+    const [unavailableReadiness, health] = await Promise.all([
+      fetch(`${api.baseUrl}/ready`),
+      fetch(`${api.baseUrl}/health`),
+    ]);
+    const unavailableText = await unavailableReadiness.text();
+
+    expect(unavailableReadiness.status).toBe(503);
+    expect(JSON.parse(unavailableText)).toStrictEqual({ status: 'not_ready' });
+    expect(unavailableText).not.toMatch(
+      /postgres|database_url|password|credential|host|port|stack|error/iu,
+    );
+    expect(health.status).toBe(200);
+    expect(await health.json()).toStrictEqual({ status: 'ok' });
+
+    api.database.setHealthy(true);
+    const recoveredReadiness = await fetch(`${api.baseUrl}/ready`);
+
+    expect(recoveredReadiness.status).toBe(200);
+    expect(await recoveredReadiness.json()).toStrictEqual({ status: 'ready' });
   });
 });

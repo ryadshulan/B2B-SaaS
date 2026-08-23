@@ -125,6 +125,27 @@ describe('structured logger', () => {
     expect(JSON.stringify(records[0])).not.toContain('storage-secret');
   });
 
+  it('removes database URLs and embedded connection credentials from structured output', () => {
+    const { logger, serializedOutput } = captureLogger();
+    const databaseUrl =
+      'postgresql://database-user:database-password@private.internal:5432/customer_ops?sslpassword=query-password';
+
+    logger.error(
+      {
+        databaseUrl,
+        nested: { database_url: databaseUrl },
+        error: new Error(`connection failed for ${databaseUrl}`),
+      },
+      'Database connection failed safely',
+    );
+
+    const output = serializedOutput.join('\n');
+    expect(output).not.toContain(databaseUrl);
+    expect(output).not.toContain('database-user');
+    expect(output).not.toContain('database-password');
+    expect(output).not.toContain('query-password');
+  });
+
   it('redacts camelCase, PascalCase, and mixed-style credential keys in serialized output', () => {
     const { logger, records, serializedOutput } = captureLogger();
     const secretValues = [
