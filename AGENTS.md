@@ -4,6 +4,7 @@
 - Respect application, package, and backend module boundaries; keep controllers thin.
 - Never bypass workspace tenant isolation or RBAC, even temporarily.
 - Never expose, commit, or log secrets. Validate every external input.
+- Normal application code must use `@customer-ops/config` instead of reading `process.env` directly.
 - Keep provider-specific behavior behind adapter interfaces.
 - Design side effects for retries and idempotency.
 - Add focused tests for security-sensitive behavior.
