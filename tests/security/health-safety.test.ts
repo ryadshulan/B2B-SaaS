@@ -48,6 +48,58 @@ describe('runtime foundation security', () => {
     expect(contents.filter((source) => source.includes('process.env'))).toStrictEqual([]);
   });
 
+  it('keeps PostgreSQL driver construction inside the database package', async () => {
+    const [apiFiles, workerFiles, databaseFiles] = await Promise.all([
+      findTypeScriptFiles('apps/api/src'),
+      findTypeScriptFiles('apps/worker/src'),
+      findTypeScriptFiles('packages/database/src'),
+    ]);
+    const applicationSources = await Promise.all(
+      [...apiFiles, ...workerFiles].map((file) => readFile(file, 'utf8')),
+    );
+    const databaseSources = await Promise.all(
+      databaseFiles.map(async (file) => ({ file, source: await readFile(file, 'utf8') })),
+    );
+
+    expect(applicationSources.filter((source) => /from ['"]pg['"]/u.test(source))).toStrictEqual(
+      [],
+    );
+    expect(applicationSources.filter((source) => /new Pool\s*\(/u.test(source))).toStrictEqual([]);
+    expect(
+      databaseSources.filter(({ source }) => /new Pool\s*\(/u.test(source)).map(({ file }) => file),
+    ).toStrictEqual([join('packages', 'database', 'src', 'pool.ts')]);
+  });
+
+  it('keeps controllers outside raw database and transaction boundaries', async () => {
+    const apiFiles = await findTypeScriptFiles('apps/api/src');
+    const controllerFiles = apiFiles.filter((file) => file.endsWith('.controller.ts'));
+    const controllerSources = await Promise.all(
+      controllerFiles.map((file) => readFile(file, 'utf8')),
+    );
+
+    expect(controllerFiles.length).toBeGreaterThan(0);
+    expect(
+      controllerSources.filter((source) =>
+        /@customer-ops\/database|from ['"](?:pg|kysely)['"]|DATABASE_RUNTIME/u.test(source),
+      ),
+    ).toStrictEqual([]);
+  });
+
+  it('records enforceable tenant persistence conventions before tenant schema exists', async () => {
+    const [security, databaseOperations, agentRules] = await Promise.all([
+      readFile('docs/security/SECURITY.md', 'utf8'),
+      readFile('docs/operations/DATABASE.md', 'utf8'),
+      readFile('AGENTS.md', 'utf8'),
+    ]);
+    const conventions = `${security}\n${databaseOperations}\n${agentRules}`;
+
+    expect(conventions).toContain('workspace_id');
+    expect(conventions).toMatch(/explicit (?:trusted )?workspace scope/iu);
+    expect(conventions).toContain('findById(id)');
+    expect(conventions).toMatch(/frontend-supplied workspace ID.+not authorization/iu);
+    expect(conventions).toMatch(/row-level security.+defense in depth/iu);
+  });
+
   it('redacts nested logger secrets in actual structured output', () => {
     const destination = new PassThrough();
     let output = '';
@@ -67,6 +119,32 @@ describe('runtime foundation security', () => {
     expect(output).not.toContain('must-not-appear');
   });
 
+  it('never serializes database URLs or embedded PostgreSQL credentials', () => {
+    const destination = new PassThrough();
+    let output = '';
+    destination.on('data', (chunk: Buffer) => {
+      output += chunk.toString('utf8');
+    });
+    const logger = createLogger({
+      service: 'database-security-test',
+      environment: 'test',
+      level: 'info',
+      destination,
+    });
+    const databaseUrl =
+      'postgresql://security-user:security-password@private.internal/customer_ops';
+
+    logger.info(
+      { databaseUrl, nested: { database_url: databaseUrl } },
+      `databaseUrl=${databaseUrl}`,
+    );
+
+    expect(output).not.toContain(databaseUrl);
+    expect(output).not.toContain('security-user');
+    expect(output).not.toContain('security-password');
+    expect(output).toContain('[REDACTED]');
+  });
+
   it('returns minimal health and readiness responses without infrastructure data', async () => {
     const [health, readiness] = await Promise.all([
       fetch(`${api.baseUrl}/health`),
@@ -79,6 +157,19 @@ describe('runtime foundation security', () => {
     for (const response of responses) {
       expect(response).not.toMatch(/DATABASE_URL|REDIS_URL|password|secret|process\.env/iu);
     }
+  });
+
+  it('does not expose database failure or credential details through readiness', async () => {
+    api.database.setHealthy(false);
+    const response = await fetch(`${api.baseUrl}/ready`);
+    const responseText = await response.text();
+    api.database.setHealthy(true);
+
+    expect(response.status).toBe(503);
+    expect(JSON.parse(responseText)).toStrictEqual({ status: 'not_ready' });
+    expect(responseText).not.toMatch(
+      /postgres|database_url|username|password|credential|host|port|stack|error/iu,
+    );
   });
 
   it('does not leak stack traces or internals in normalized errors', async () => {

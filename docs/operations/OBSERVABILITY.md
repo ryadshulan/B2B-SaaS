@@ -6,16 +6,22 @@
 
 Current variables are:
 
-| Variable                      | Required | Default       | Constraint                             |
-| ----------------------------- | -------- | ------------- | -------------------------------------- |
-| `NODE_ENV`                    | No       | `development` | `development`, `test`, or `production` |
-| `APP_NAME`                    | Yes      | None          | Trimmed, 1–128 characters              |
-| `APP_VERSION`                 | No       | None          | At most 256 characters                 |
-| `API_PORT`                    | API only | `3001`        | Integer from 1 through 65535           |
-| `LOG_LEVEL`                   | No       | `info`        | `debug`, `info`, `warn`, or `error`    |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | No       | None          | Valid URL reserved for later use       |
+| Variable                         | Required | Default       | Constraint                             |
+| -------------------------------- | -------- | ------------- | -------------------------------------- |
+| `NODE_ENV`                       | No       | `development` | `development`, `test`, or `production` |
+| `APP_NAME`                       | Yes      | None          | Trimmed, 1–128 characters              |
+| `APP_VERSION`                    | No       | None          | At most 256 characters                 |
+| `API_PORT`                       | API only | `3001`        | Integer from 1 through 65535           |
+| `LOG_LEVEL`                      | No       | `info`        | `debug`, `info`, `warn`, or `error`    |
+| `DATABASE_URL`                   | API/DB   | None          | Non-empty `postgres`/`postgresql` URL  |
+| `DB_POOL_MAX`                    | No       | `10`          | Integer from 1 through 100             |
+| `DB_CONNECTION_TIMEOUT_MS`       | No       | `5000`        | Integer from 1 through 60000           |
+| `DB_IDLE_TIMEOUT_MS`             | No       | `30000`       | Integer from 1 through 600000          |
+| `DB_STATEMENT_TIMEOUT_MS`        | No       | `15000`       | Integer from 1 through 300000          |
+| `DB_IDLE_TRANSACTION_TIMEOUT_MS` | No       | `30000`       | Integer from 1 through 300000          |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`    | No       | None          | Valid URL reserved for later use       |
 
-Database, Redis, object-storage, and provider settings remain future variables and are not validated until their owning clients exist. Invalid supplied values fail startup. Validation errors identify only the field and failed constraint.
+The API and migration CLI validate database settings; the worker does not consume or require them in C02. Redis, object-storage, and provider settings remain future variables. Invalid values fail startup. Validation errors identify only the field and failed constraint and never include `DATABASE_URL` values.
 
 ## Structured logs
 
@@ -29,6 +35,8 @@ The minimum C01 events are:
 - `nest.framework`
 - `worker.started`, `worker.stopping`, `worker.stopped`, and `worker.bootstrap.failed`
 
+C02 adds `database.pool.created`, `database.pool.closed`, `database.pool.error`, `database.health.failed`, `database.migration.started`, `database.migration.completed`, and `database.migration.failed`. Database events never include SQL text, parameter values, connection strings, or raw driver errors.
+
 The logger censors common credentials recursively before serialization. This includes authorization and cookie headers, passwords and hashes, access/refresh tokens, generic token/secret/API key fields, application and Meta secrets, database/Redis URLs, and S3 secret keys. Callers must still keep credentials out of log messages and must never log complete request bodies, response bodies, headers, or environment objects.
 
 ## Request context
@@ -41,6 +49,6 @@ HTTP completion records contain only `method`, query-free `path`, `status_code`,
 
 Known application errors and Nest HTTP exceptions share the documented API error envelope. Unknown exceptions are logged with internal error serialization and return only a generic 500 response. Client responses never include stack traces or raw exception objects.
 
-`GET /health` is liveness and reports only `{ "status": "ok" }`. `GET /ready` confirms configuration validation and successful API bootstrap and reports only `{ "status": "ready" }`. C02 must add PostgreSQL readiness only when the database client becomes a critical runtime dependency; later milestones follow the same rule for their dependencies.
+`GET /health` is liveness and always reports only `{ "status": "ok" }` while the process can serve HTTP. `GET /ready` performs a fresh bounded PostgreSQL `SELECT 1`: it reports `{ "status": "ready" }` with HTTP 200 on success or `{ "status": "not_ready" }` with HTTP 503 on failure. No failure details are returned, and recovery requires no process restart.
 
 C01 does not configure a metrics backend, tracing SDK/backend, Sentry, Prometheus, or Grafana. The optional OTLP endpoint is reserved metadata for a later observability milestone.

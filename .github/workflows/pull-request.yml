@@ -6,6 +6,11 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      APP_NAME: customer-operations-platform
+      LOG_LEVEL: info
+      DATABASE_URL: postgresql://customer_ops:local_development_only@127.0.0.1:5432/customer_ops
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -51,6 +56,14 @@ jobs:
               exit 1
             fi
           done
+      - name: Validate database migrations
+        run: |
+          pnpm db:migrate:status
+          pnpm db:migrate:latest
+          pnpm db:migrate:status
+          pnpm db:migrate:down
+          pnpm db:migrate:latest
+      - run: pnpm test:database
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

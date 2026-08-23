@@ -15,8 +15,22 @@ export interface RuntimeConfig {
   otelExporterOtlpEndpoint?: string;
 }
 
+export interface DatabaseConfig {
+  url: string;
+  maxConnections: number;
+  connectionTimeoutMs: number;
+  idleTimeoutMs: number;
+  statementTimeoutMs: number;
+  idleTransactionTimeoutMs: number;
+}
+
 export interface ApiConfig extends RuntimeConfig {
   port: number;
+  database: DatabaseConfig;
+}
+
+export interface DatabaseRuntimeConfig extends RuntimeConfig {
+  database: DatabaseConfig;
 }
 
 export type WorkerConfig = RuntimeConfig;
@@ -59,8 +73,48 @@ const baseSchemaShape = {
   OTEL_EXPORTER_OTLP_ENDPOINT: optionalBoundedString.pipe(z.url().max(2048).optional()),
 };
 
+function positiveBoundedInteger(defaultValue: number, maximum: number) {
+  return z
+    .string()
+    .regex(/^\d+$/, `must be an integer between 1 and ${maximum}`)
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(maximum))
+    .default(defaultValue);
+}
+
+const databaseUrlSchema = z
+  .string()
+  .trim()
+  .min(1, 'must be a non-empty PostgreSQL URL')
+  .max(2048, 'must be at most 2048 characters')
+  .superRefine((value, context) => {
+    try {
+      const url = new URL(value);
+      if (
+        (url.protocol !== 'postgresql:' && url.protocol !== 'postgres:') ||
+        url.hostname === '' ||
+        url.pathname === '' ||
+        url.pathname === '/'
+      ) {
+        context.addIssue({ code: 'custom', message: 'must be a valid PostgreSQL URL' });
+      }
+    } catch {
+      context.addIssue({ code: 'custom', message: 'must be a valid PostgreSQL URL' });
+    }
+  });
+
+const databaseSchemaShape = {
+  DATABASE_URL: databaseUrlSchema,
+  DB_POOL_MAX: positiveBoundedInteger(10, 100),
+  DB_CONNECTION_TIMEOUT_MS: positiveBoundedInteger(5_000, 60_000),
+  DB_IDLE_TIMEOUT_MS: positiveBoundedInteger(30_000, 600_000),
+  DB_STATEMENT_TIMEOUT_MS: positiveBoundedInteger(15_000, 300_000),
+  DB_IDLE_TRANSACTION_TIMEOUT_MS: positiveBoundedInteger(30_000, 300_000),
+};
+
 const apiSchema = z.object({
   ...baseSchemaShape,
+  ...databaseSchemaShape,
   API_PORT: z
     .string()
     .regex(/^\d+$/, 'must be an integer between 1 and 65535')
@@ -70,6 +124,8 @@ const apiSchema = z.object({
 });
 
 const workerSchema = z.object(baseSchemaShape);
+const databaseSchema = z.object(databaseSchemaShape);
+const databaseRuntimeSchema = z.object({ ...baseSchemaShape, ...databaseSchemaShape });
 
 function parseConfig<T>(schema: z.ZodType<T>, environment: EnvironmentSource): T {
   const result = schema.safeParse(environment);
@@ -91,13 +147,37 @@ function toRuntimeConfig(parsed: z.output<typeof workerSchema>): RuntimeConfig {
   };
 }
 
+function toDatabaseConfig(parsed: z.output<typeof databaseSchema>): DatabaseConfig {
+  return {
+    url: parsed.DATABASE_URL,
+    maxConnections: parsed.DB_POOL_MAX,
+    connectionTimeoutMs: parsed.DB_CONNECTION_TIMEOUT_MS,
+    idleTimeoutMs: parsed.DB_IDLE_TIMEOUT_MS,
+    statementTimeoutMs: parsed.DB_STATEMENT_TIMEOUT_MS,
+    idleTransactionTimeoutMs: parsed.DB_IDLE_TRANSACTION_TIMEOUT_MS,
+  };
+}
+
 export function loadApiConfig(environment: EnvironmentSource): ApiConfig {
   const parsed = parseConfig(apiSchema, environment);
-  return { ...toRuntimeConfig(parsed), port: parsed.API_PORT };
+  return {
+    ...toRuntimeConfig(parsed),
+    port: parsed.API_PORT,
+    database: toDatabaseConfig(parsed),
+  };
 }
 
 export function loadWorkerConfig(environment: EnvironmentSource): WorkerConfig {
   return toRuntimeConfig(parseConfig(workerSchema, environment));
+}
+
+export function loadDatabaseConfig(environment: EnvironmentSource): DatabaseConfig {
+  return toDatabaseConfig(parseConfig(databaseSchema, environment));
+}
+
+export function loadDatabaseRuntimeConfig(environment: EnvironmentSource): DatabaseRuntimeConfig {
+  const parsed = parseConfig(databaseRuntimeSchema, environment);
+  return { ...toRuntimeConfig(parsed), database: toDatabaseConfig(parsed) };
 }
 
 function findRepositoryRoot(startDirectory: string): string | undefined {
@@ -156,4 +236,14 @@ export function loadApiConfigFromEnvironment(): ApiConfig {
 export function loadWorkerConfigFromEnvironment(): WorkerConfig {
   loadLocalEnvironment(process.env);
   return loadWorkerConfig(process.env);
+}
+
+export function loadDatabaseConfigFromEnvironment(): DatabaseConfig {
+  loadLocalEnvironment(process.env);
+  return loadDatabaseConfig(process.env);
+}
+
+export function loadDatabaseRuntimeConfigFromEnvironment(): DatabaseRuntimeConfig {
+  loadLocalEnvironment(process.env);
+  return loadDatabaseRuntimeConfig(process.env);
 }

@@ -1,5 +1,29 @@
 {
-  "name": "@customer-ops/database", "version": "0.0.0", "private": true, "type": "module",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc --noEmit", "test": "vitest run --passWithNoTests" }
+  "name": "@customer-ops/database",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "db:migrate": "node dist/migration-cli.js latest",
+    "db:migrate:latest": "node dist/migration-cli.js latest",
+    "db:migrate:down": "node dist/migration-cli.js down",
+    "db:migrate:status": "node dist/migration-cli.js status",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@customer-ops/config": "workspace:*",
+    "@customer-ops/logger": "workspace:*",
+    "kysely": "0.28.8",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
 }
