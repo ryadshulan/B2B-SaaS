@@ -19,6 +19,7 @@ const validEnvironment: EnvironmentSource = {
   API_PORT: '3001',
   LOG_LEVEL: 'debug',
   DATABASE_URL: 'postgresql://customer_ops:test-password@localhost:5432/customer_ops',
+  WEB_ORIGIN: 'http://localhost:3000',
   REDIS_URL: 'redis://queue-user:queue-password@localhost:6379',
 };
 
@@ -38,6 +39,7 @@ describe('runtime configuration', () => {
         statementTimeoutMs: 15000,
         idleTransactionTimeoutMs: 30000,
       },
+      auth: { webOrigin: 'http://localhost:3000', sessionTtlSeconds: 604800 },
     });
   });
 
@@ -70,6 +72,7 @@ describe('runtime configuration', () => {
       loadApiConfig({
         APP_NAME: 'customer-operations-platform',
         DATABASE_URL: 'postgres://localhost/customer_ops',
+        WEB_ORIGIN: 'http://localhost:3000/',
       }),
     ).toStrictEqual({
       environment: 'development',
@@ -84,6 +87,7 @@ describe('runtime configuration', () => {
         statementTimeoutMs: 15000,
         idleTransactionTimeoutMs: 30000,
       },
+      auth: { webOrigin: 'http://localhost:3000', sessionTtlSeconds: 604800 },
     });
   });
 
@@ -94,6 +98,28 @@ describe('runtime configuration', () => {
     ['API_PORT above range', { ...validEnvironment, API_PORT: '65536' }, 'API_PORT'],
     ['invalid LOG_LEVEL', { ...validEnvironment, LOG_LEVEL: 'verbose' }, 'LOG_LEVEL'],
     ['missing DATABASE_URL', { ...validEnvironment, DATABASE_URL: undefined }, 'DATABASE_URL'],
+    ['missing WEB_ORIGIN', { ...validEnvironment, WEB_ORIGIN: undefined }, 'WEB_ORIGIN'],
+    ['WEB_ORIGIN path', { ...validEnvironment, WEB_ORIGIN: 'https://web.test/path' }, 'WEB_ORIGIN'],
+    [
+      'WEB_ORIGIN credentials',
+      { ...validEnvironment, WEB_ORIGIN: 'https://u:p@web.test' },
+      'WEB_ORIGIN',
+    ],
+    [
+      'production HTTP WEB_ORIGIN',
+      { ...validEnvironment, NODE_ENV: 'production', WEB_ORIGIN: 'http://web.test' },
+      'WEB_ORIGIN',
+    ],
+    [
+      'session TTL below range',
+      { ...validEnvironment, AUTH_SESSION_TTL_SECONDS: '299' },
+      'AUTH_SESSION_TTL_SECONDS',
+    ],
+    [
+      'session TTL above range',
+      { ...validEnvironment, AUTH_SESSION_TTL_SECONDS: '2592001' },
+      'AUTH_SESSION_TTL_SECONDS',
+    ],
     [
       'invalid DATABASE_URL protocol',
       { ...validEnvironment, DATABASE_URL: 'mysql://localhost/customer_ops' },
@@ -261,6 +287,8 @@ describe('local dotenv discovery', () => {
     'REDIS_CONNECT_TIMEOUT_MS',
     'REDIS_HEALTH_TIMEOUT_MS',
     'WORKER_SHUTDOWN_TIMEOUT_MS',
+    'WEB_ORIGIN',
+    'AUTH_SESSION_TTL_SECONDS',
   ] as const;
   let originalDirectory: string;
   let originalEnvironment: Record<(typeof configurationKeys)[number], string | undefined>;
@@ -300,7 +328,7 @@ describe('local dotenv discovery', () => {
   it('loads the repository root .env when launched from the repository root', async () => {
     await writeFile(
       join(repositoryDirectory, '.env'),
-      'APP_NAME=root-environment\nDATABASE_URL=postgresql://localhost/root_environment\nREDIS_URL=redis://localhost:6379\n',
+      'APP_NAME=root-environment\nDATABASE_URL=postgresql://localhost/root_environment\nREDIS_URL=redis://localhost:6379\nWEB_ORIGIN=http://localhost:3000\n',
     );
     process.chdir(repositoryDirectory);
 
@@ -316,7 +344,7 @@ describe('local dotenv discovery', () => {
   ])('loads the repository root .env when launched from %s', async (relativePath, loader) => {
     await writeFile(
       join(repositoryDirectory, '.env'),
-      'APP_NAME=nested-environment\nDATABASE_URL=postgresql://localhost/nested_environment\nREDIS_URL=redis://localhost:6379\n',
+      'APP_NAME=nested-environment\nDATABASE_URL=postgresql://localhost/nested_environment\nREDIS_URL=redis://localhost:6379\nWEB_ORIGIN=http://localhost:3000\n',
     );
     process.chdir(join(repositoryDirectory, relativePath));
 
@@ -344,7 +372,7 @@ describe('local dotenv discovery', () => {
   it('skips local dotenv loading in production', async () => {
     await writeFile(
       join(repositoryDirectory, '.env'),
-      'APP_NAME=local-production-environment\nDATABASE_URL=postgresql://localhost/production_environment\nREDIS_URL=redis://localhost:6379\n',
+      'APP_NAME=local-production-environment\nDATABASE_URL=postgresql://localhost/production_environment\nREDIS_URL=redis://localhost:6379\nWEB_ORIGIN=https://web.example.test\n',
     );
     process.env.NODE_ENV = 'production';
     process.chdir(repositoryDirectory);

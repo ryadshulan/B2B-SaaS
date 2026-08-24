@@ -64,7 +64,15 @@ export async function startApiTestHarness(): Promise<ApiTestHarness> {
     destination,
   });
   const database = createTestDatabase();
-  const application = await createApiApplication({ logger, database: database.runtime });
+  const application = await createApiApplication({
+    logger,
+    database: database.runtime,
+    auth: {
+      webOrigin: 'http://localhost:3000',
+      sessionTtlSeconds: 604_800,
+      secureCookies: false,
+    },
+  });
   await application.listen(0, '127.0.0.1');
   const address = (
     application.getHttpServer() as { address(): AddressInfo | string | null }

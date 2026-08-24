@@ -24,9 +24,15 @@ export interface DatabaseConfig {
   idleTransactionTimeoutMs: number;
 }
 
+export interface AuthConfig {
+  webOrigin: string;
+  sessionTtlSeconds: number;
+}
+
 export interface ApiConfig extends RuntimeConfig {
   port: number;
   database: DatabaseConfig;
+  auth: AuthConfig;
 }
 
 export interface DatabaseRuntimeConfig extends RuntimeConfig {
@@ -84,13 +90,17 @@ const baseSchemaShape = {
   OTEL_EXPORTER_OTLP_ENDPOINT: optionalBoundedString.pipe(z.url().max(2048).optional()),
 };
 
-function positiveBoundedInteger(defaultValue: number, maximum: number) {
+function boundedInteger(defaultValue: number, minimum: number, maximum: number) {
   return z
     .string()
-    .regex(/^\d+$/, `must be an integer between 1 and ${maximum}`)
+    .regex(/^\d+$/, `must be an integer between ${minimum} and ${maximum}`)
     .transform(Number)
-    .pipe(z.number().int().min(1).max(maximum))
+    .pipe(z.number().int().min(minimum).max(maximum))
     .default(defaultValue);
+}
+
+function positiveBoundedInteger(defaultValue: number, maximum: number) {
+  return boundedInteger(defaultValue, 1, maximum);
 }
 
 const databaseUrlSchema = z
@@ -156,16 +166,53 @@ const queueSchemaShape = {
   WORKER_SHUTDOWN_TIMEOUT_MS: positiveBoundedInteger(15_000, 120_000),
 };
 
-const apiSchema = z.object({
-  ...baseSchemaShape,
-  ...databaseSchemaShape,
-  API_PORT: z
-    .string()
-    .regex(/^\d+$/, 'must be an integer between 1 and 65535')
-    .transform(Number)
-    .pipe(z.number().int().min(1).max(65_535))
-    .default(3001),
-});
+const webOriginSchema = z
+  .string()
+  .trim()
+  .max(2048, 'must be at most 2048 characters')
+  .transform((value, context) => {
+    try {
+      const url = new URL(value);
+      if (
+        (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+        url.username !== '' ||
+        url.password !== '' ||
+        url.pathname !== '/' ||
+        url.search !== '' ||
+        url.hash !== ''
+      ) {
+        context.addIssue({ code: 'custom', message: 'must be an exact HTTP(S) origin' });
+        return z.NEVER;
+      }
+      return url.origin;
+    } catch {
+      context.addIssue({ code: 'custom', message: 'must be an exact HTTP(S) origin' });
+      return z.NEVER;
+    }
+  });
+
+const apiSchema = z
+  .object({
+    ...baseSchemaShape,
+    ...databaseSchemaShape,
+    API_PORT: z
+      .string()
+      .regex(/^\d+$/, 'must be an integer between 1 and 65535')
+      .transform(Number)
+      .pipe(z.number().int().min(1).max(65_535))
+      .default(3001),
+    WEB_ORIGIN: webOriginSchema,
+    AUTH_SESSION_TTL_SECONDS: boundedInteger(604_800, 300, 2_592_000),
+  })
+  .superRefine((value, context) => {
+    if (value.NODE_ENV === 'production' && !value.WEB_ORIGIN.startsWith('https://')) {
+      context.addIssue({
+        code: 'custom',
+        path: ['WEB_ORIGIN'],
+        message: 'must use HTTPS in production',
+      });
+    }
+  });
 
 const workerSchema = z.object({ ...baseSchemaShape, ...queueSchemaShape });
 const databaseSchema = z.object(databaseSchemaShape);
@@ -179,11 +226,11 @@ function parseConfig<T>(schema: z.ZodType<T>, environment: EnvironmentSource): T
   return result.data;
 }
 
-function toRuntimeConfig(parsed: z.output<typeof workerSchema>): RuntimeConfig;
-function toRuntimeConfig(parsed: z.output<typeof apiSchema>): RuntimeConfig;
-function toRuntimeConfig(parsed: z.output<typeof databaseRuntimeSchema>): RuntimeConfig;
 function toRuntimeConfig(
-  parsed: z.output<typeof workerSchema | typeof apiSchema | typeof databaseRuntimeSchema>,
+  parsed:
+    | z.output<typeof workerSchema>
+    | z.output<typeof apiSchema>
+    | z.output<typeof databaseRuntimeSchema>,
 ): RuntimeConfig {
   return {
     environment: parsed.NODE_ENV,
@@ -224,6 +271,10 @@ export function loadApiConfig(environment: EnvironmentSource): ApiConfig {
     ...toRuntimeConfig(parsed),
     port: parsed.API_PORT,
     database: toDatabaseConfig(parsed),
+    auth: {
+      webOrigin: parsed.WEB_ORIGIN,
+      sessionTtlSeconds: parsed.AUTH_SESSION_TTL_SECONDS,
+    },
   };
 }
 

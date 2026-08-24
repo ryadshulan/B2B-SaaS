@@ -52,18 +52,33 @@ function assertDisposableSchema(schema: string): void {
   }
 }
 
+function withSearchPath(databaseUrl: string, schema: string): string {
+  assertDisposableSchema(schema);
+  const url = new URL(databaseUrl);
+  url.searchParams.set('options', `-csearch_path=${schema}`);
+  return url.toString();
+}
+
 describe('PostgreSQL database foundation', () => {
   const captured = createCapturedLogger();
   const migrationSchema = disposableSchema('migration');
   const transactionSchema = disposableSchema('transaction');
   let config: DatabaseConfig;
   let database: DatabaseRuntime<IntegrationDatabaseSchema> | undefined;
+  let migrationDatabase: DatabaseRuntime<IntegrationDatabaseSchema> | undefined;
 
   function getDatabase(): DatabaseRuntime<IntegrationDatabaseSchema> {
     if (database === undefined) {
       throw new Error('Database integration runtime was not initialized');
     }
     return database;
+  }
+
+  function getMigrationDatabase(): DatabaseRuntime<IntegrationDatabaseSchema> {
+    if (migrationDatabase === undefined) {
+      throw new Error('Migration integration runtime was not initialized');
+    }
+    return migrationDatabase;
   }
 
   beforeAll(async () => {
@@ -78,12 +93,21 @@ describe('PostgreSQL database foundation', () => {
     }
     await database.executor.schema.createSchema(migrationSchema).execute();
     await database.executor.schema.createSchema(transactionSchema).execute();
+    migrationDatabase = createDatabase<IntegrationDatabaseSchema>({
+      config: {
+        ...config,
+        url: withSearchPath(config.url, migrationSchema),
+        maxConnections: Math.min(config.maxConnections, 4),
+      },
+      logger: captured.logger,
+    });
   });
 
   afterAll(async () => {
     if (database === undefined) {
       return;
     }
+    await migrationDatabase?.close();
     for (const schema of [migrationSchema, transactionSchema]) {
       assertDisposableSchema(schema);
       await database.executor.schema.dropSchema(schema).ifExists().cascade().execute();
@@ -173,32 +197,36 @@ describe('PostgreSQL database foundation', () => {
   });
 
   it('runs deterministic migrations latest/down idempotently and serializes concurrent runs', async () => {
-    const runtime = getDatabase();
+    const runtime = getMigrationDatabase();
     const options = { migrationTableSchema: migrationSchema, logger: captured.logger };
 
     expect(await getMigrationStatus(runtime, options)).toStrictEqual([
       { name: '0001_c02_database_baseline', status: 'pending' },
+      { name: '0002_c04_authentication_foundation', status: 'pending' },
     ]);
     await expect(migrateToLatest(runtime, options)).resolves.toMatchObject({
       direction: 'latest',
-      migrations: ['0001_c02_database_baseline'],
+      migrations: ['0001_c02_database_baseline', '0002_c04_authentication_foundation'],
     });
     expect(await getMigrationStatus(runtime, options)).toMatchObject([
       { name: '0001_c02_database_baseline', status: 'applied' },
+      { name: '0002_c04_authentication_foundation', status: 'applied' },
     ]);
     await expect(migrateToLatest(runtime, options)).resolves.toMatchObject({ migrations: [] });
 
     await expect(migrateDown(runtime, options)).resolves.toMatchObject({
       direction: 'down',
-      migrations: ['0001_c02_database_baseline'],
+      migrations: ['0002_c04_authentication_foundation'],
     });
     expect(await getMigrationStatus(runtime, options)).toStrictEqual([
-      { name: '0001_c02_database_baseline', status: 'pending' },
+      expect.objectContaining({ name: '0001_c02_database_baseline', status: 'applied' }),
+      { name: '0002_c04_authentication_foundation', status: 'pending' },
     ]);
 
     await Promise.all([migrateToLatest(runtime, options), migrateToLatest(runtime, options)]);
     expect(await getMigrationStatus(runtime, options)).toMatchObject([
       { name: '0001_c02_database_baseline', status: 'applied' },
+      { name: '0002_c04_authentication_foundation', status: 'applied' },
     ]);
 
     const metadataTables = await sql<{ table_name: string }>`
@@ -208,8 +236,11 @@ describe('PostgreSQL database foundation', () => {
       order by table_name
     `.execute(runtime.executor);
     expect(metadataTables.rows.map((row) => row.table_name)).toStrictEqual([
+      'auth_password_credentials',
+      'auth_sessions',
       'kysely_migration',
       'kysely_migration_lock',
+      'users',
     ]);
   });
 

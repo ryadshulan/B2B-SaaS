@@ -5,7 +5,12 @@ export type ApplicationErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'RATE_LIMITED'
-  | 'INTERNAL_SERVER_ERROR';
+  | 'INTERNAL_SERVER_ERROR'
+  | 'validation_error'
+  | 'invalid_credentials'
+  | 'unauthenticated'
+  | 'origin_mismatch'
+  | 'duplicate_registration';
 
 export interface ApplicationErrorOptions {
   code: ApplicationErrorCode;

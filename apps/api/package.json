@@ -10,6 +10,7 @@
     "test": "vitest run src"
   },
   "dependencies": {
+    "@customer-ops/auth": "workspace:*",
     "@customer-ops/config": "workspace:*",
     "@customer-ops/database": "workspace:*",
     "@customer-ops/logger": "workspace:*",

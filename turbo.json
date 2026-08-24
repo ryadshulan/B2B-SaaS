@@ -5,6 +5,8 @@
     "APP_NAME",
     "APP_VERSION",
     "API_PORT",
+    "WEB_ORIGIN",
+    "AUTH_SESSION_TTL_SECONDS",
     "LOG_LEVEL",
     "DATABASE_URL",
     "DB_POOL_MAX",

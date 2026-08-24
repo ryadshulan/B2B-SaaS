@@ -19,7 +19,15 @@ describe('DatabaseModule lifecycle', () => {
       level: 'error',
       destination: new PassThrough(),
     });
-    const application = await createApiApplication({ logger, database });
+    const application = await createApiApplication({
+      logger,
+      database,
+      auth: {
+        webOrigin: 'http://localhost:3000',
+        sessionTtlSeconds: 604_800,
+        secureCookies: false,
+      },
+    });
 
     await application.init();
     await application.close();

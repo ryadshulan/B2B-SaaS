@@ -2,7 +2,7 @@
 
 ## Technology and ownership
 
-PostgreSQL is the system of record. `@customer-ops/database` owns the `pg` pool, Kysely executor, transaction helper, health check, migrations, and shutdown behavior. Applications receive its typed runtime through infrastructure providers and must not instantiate pools or expose raw driver access. C02 has an empty application schema and no business tables.
+PostgreSQL is the system of record. `@customer-ops/database` owns the `pg` pool, Kysely executor, transaction helper, health check, migrations, and shutdown behavior. Applications receive its typed runtime through infrastructure providers and must not instantiate pools or expose raw driver access. C04 adds only global authentication tables; it adds no tenant or business schema.
 
 The API creates one lazy pool per process after configuration validation. Temporary PostgreSQL unavailability does not prevent HTTP startup: liveness remains available and readiness stays `503` until the database recovers. Nest shutdown closes the pool; close is safe to repeat. The worker has no database workload in C02 and does not require database configuration.
 
@@ -35,7 +35,7 @@ Capacity planning must multiply pool maximum by every API replica and future con
 
 ## Migrations and deployment
 
-Migrations live in `packages/database/src/migrations` and use immutable sortable names such as `0001_c02_database_baseline`. The baseline proves forward/backward infrastructure and creates no application table; Kysely owns only its migration metadata tables. Once applied anywhere, a migration is never edited—corrections use a new migration.
+Migrations live in `packages/database/src/migrations` and use immutable sortable names such as `0001_c02_database_baseline`. The baseline proves forward/backward infrastructure and creates no application table. `0002_c04_authentication_foundation` creates `users`, `auth_password_credentials`, and `auth_sessions`, plus normalized-email/session-token uniqueness, status checks, foreign keys, and session user/expiry/revocation indexes. Its down direction drops only those three tables in reverse dependency order. Once applied anywhere, a migration is never edited—corrections use a new migration.
 
 Kysely migration execution is transactionally locked with a bounded PostgreSQL advisory lock, preventing concurrent processes from racing. Production API startup never runs migrations. Deployments run `pnpm db:migrate:latest` as an explicit release step, check `pnpm db:migrate:status`, and only then declare the release ready. Migration failures exit non-zero and log safe event metadata without connection strings, SQL, or parameters.
 
@@ -54,4 +54,4 @@ Future tenant-owned tables must include `workspace_id`. Their repositories must 
 
 ## Test isolation
 
-Database integration tests use the configured PostgreSQL instance but create only cryptographically unique `c02_migration_*` and `c02_transaction_*` schemas. Cleanup validates those prefixes before dropping the disposable schemas. Tests never issue `DROP DATABASE`, reset shared schemas, or assume SQLite equivalence.
+Database integration tests use the configured PostgreSQL instance but create only cryptographically unique `c02_migration_*`, `c02_transaction_*`, `c04_auth_*`, and `c04_cli_*` schemas. Cleanup validates those prefixes before dropping the disposable schemas. Tests never issue `DROP DATABASE`, reset shared schemas, or assume SQLite equivalence.
