@@ -4,7 +4,7 @@
 
 Redis is the current durable job broker and BullMQ manages background jobs. `@customer-ops/queue` owns all raw ioredis and BullMQ construction, naming, health checks, producer/worker adapters, safe errors, retention defaults, and resource closure. Applications do not construct Redis clients or BullMQ objects. `packages/events` remains transport-neutral.
 
-The worker is independently runnable and deployable. C03 intentionally ships an empty production handler registry and enqueues no production jobs. C04 authentication stores sessions in PostgreSQL and adds no queue jobs or Redis dependency to the API; its `/health` and PostgreSQL-backed `/ready` contracts are unchanged.
+The worker is independently runnable and deployable. C03 intentionally ships an empty production handler registry and enqueues no production jobs. C04 authentication stores sessions in PostgreSQL, and C06 workspace access and RBAC also use PostgreSQL exclusively. Neither adds queue jobs or a Redis dependency to the API; `/health` and PostgreSQL-backed `/ready` remain unchanged.
 
 ## Local workflow
 

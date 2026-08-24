@@ -4,7 +4,7 @@
 
 An organization is the commercial/account-level container. A workspace is the operational tenant boundary within an organization. One organization may contain many workspaces, and future operational records belong to exactly one workspace through `workspace_id`.
 
-Users remain global identities. C05 deliberately creates no user-to-organization or user-to-workspace relationship, owner field, membership, role, permission, invitation, team, or workspace-switching model. Authentication proves only the global user identity. C06 will add membership-aware authorization and trusted workspace selection.
+Users remain global identities. C05 deliberately creates no ownership shortcut on organization/workspace rows. C06 relates users to operational tenants through `workspace_memberships`; authentication still proves only the global user identity, and every selected workspace is independently resolved through the active membership.
 
 ## Package and persistence
 
@@ -18,10 +18,10 @@ Display names accept Arabic and other Unicode scripts. Validation rejects non-st
 
 `createOrganizationWithInitialWorkspace` validates both names before opening a transaction, generates both UUIDs in the application, and inserts the organization and its initial workspace atomically. A workspace insertion failure rolls back the organization insertion.
 
-`createPostgresTenancyRepository(executor)` accepts either the normal database executor or a transaction-scoped Kysely executor. C06 can therefore create an organization, initial workspace, and owner membership within one externally controlled transaction without replacing the C05 repository.
+`createPostgresTenancyRepository(executor)` accepts either the normal database executor or a transaction-scoped Kysely executor. C06 uses that contract to create an organization, initial workspace, and authenticated user's owner membership within one externally controlled transaction without replacing or duplicating C05 persistence.
 
 ## Security boundary
 
-C05 exposes no organization or workspace HTTP controller or route. Until C06 supplies memberships and RBAC, an authenticated user has no established tenancy access and public CRUD would permit cross-tenant access.
+C05 itself exposes no organization or workspace HTTP controller. C06 now exposes a self-bootstrap organization route and membership-scoped workspace routes through the separate API access module. These routes use the C05 package only through its public repository contract.
 
-Client headers, queries, bodies, and cookies do not establish workspace context. Future request handling must resolve membership server-side, authorize the operation, and pass explicit trusted workspace scope into every workspace-owned repository. Future row-level security is defense in depth after that resolution; it is not an authorization substitute and must never rely on client-controlled workspace selection.
+Client headers, queries, bodies, and cookies do not establish trusted workspace context. `X-Workspace-Id` expresses a request only; C06 resolves the active user, membership, workspace, and organization server-side, authorizes the permission, and passes explicit trusted workspace scope forward. There is no arbitrary first-workspace fallback. Future row-level security is defense in depth after that resolution; it is not an authorization substitute and must never rely on client-controlled workspace selection.

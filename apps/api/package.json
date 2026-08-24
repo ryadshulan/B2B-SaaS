@@ -10,10 +10,12 @@
     "test": "vitest run src"
   },
   "dependencies": {
+    "@customer-ops/access": "workspace:*",
     "@customer-ops/auth": "workspace:*",
     "@customer-ops/config": "workspace:*",
     "@customer-ops/database": "workspace:*",
     "@customer-ops/logger": "workspace:*",
+    "@customer-ops/tenancy": "workspace:*",
     "@nestjs/common": "11.1.9",
     "@nestjs/core": "11.1.9",
     "@nestjs/platform-express": "11.1.9",

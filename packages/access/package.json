@@ -1,0 +1,20 @@
+{
+  "name": "@customer-ops/access",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@customer-ops/database": "workspace:*",
+    "@customer-ops/tenancy": "workspace:*"
+  }
+}

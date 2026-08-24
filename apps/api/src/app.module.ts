@@ -1,7 +1,7 @@
 import type { DatabaseRuntime } from '@customer-ops/database';
 import type { StructuredLogger } from '@customer-ops/logger';
 import { Module, type DynamicModule } from '@nestjs/common';
-import { AuthModule } from './auth/auth.module';
+import { AccessModule } from './access/access.module';
 import type { AuthHttpConfig } from './auth/auth-config';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
@@ -18,7 +18,7 @@ export class AppModule {
       imports: [
         DatabaseModule.register(database),
         HealthModule,
-        AuthModule.register(authConfig, logger),
+        AccessModule.register(authConfig, logger),
       ],
     };
   }

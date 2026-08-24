@@ -34,7 +34,7 @@ export class AuthModule {
         SameOriginGuard,
         SessionAuthGuard,
       ],
-      exports: [AUTH_SERVICE, SessionAuthGuard],
+      exports: [AUTH_HTTP_CONFIG, AUTH_SERVICE, SameOriginGuard, SessionAuthGuard],
     };
   }
 }

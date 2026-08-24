@@ -53,6 +53,8 @@ The logger censors common credentials recursively before serialization. This inc
 
 ## Request context
 
+C06 does not mutate the C01 AsyncLocalStorage contract. Verified workspace access is attached type-safely to the individual HTTP request after membership resolution. No client-supplied workspace value enters logger context, and authentication/session records remain workspace-agnostic. If future logging enrichment adds workspace metadata, it must occur only after the C06 resolution and preserve concurrent request isolation.
+
 The API creates an internal UUID request ID for every request and never trusts an inbound `x-request-id`. A valid inbound `x-correlation-id` is preserved; a missing or invalid value is replaced with a UUID. Valid correlation IDs are 1–128 characters from `[A-Za-z0-9._:-]`. Both IDs are returned as response headers and stored in AsyncLocalStorage so ordinary await chains and logger calls retain the correct context without a global mutable request object.
 
 HTTP completion records contain only `method`, query-free `path`, `status_code`, `duration_ms`, `request_id`, and `correlation_id`. A request emits one normal completion record.

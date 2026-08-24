@@ -11,7 +11,18 @@ Business REST routes belong below `/api/v1`. C01 does not add demonstration busi
 
 `/health` is process liveness and does not depend on PostgreSQL. `/ready` performs a fresh bounded database check, exposes no connection or failure details, and recovers without an API restart. Redis remains outside API readiness in C03 because the API does not consume queue infrastructure.
 
-C05 adds no public organization or workspace endpoint. Authentication alone does not establish tenant access; organization/workspace routes remain unavailable until C06 adds membership-aware authorization and trusted workspace resolution.
+C06 adds membership-aware organization/workspace endpoints. Authentication alone still does not establish tenant access. Successful C06 business responses use the documented `{ "data", "meta": { "request_id" } }` envelope.
+
+## Workspace access endpoints
+
+- `POST /api/v1/organizations` requires exact Origin and a valid session. It accepts only `organizationName` and `workspaceName`, needs no workspace header, and returns HTTP 201 with safe organization, initial workspace, and owner membership data.
+- `GET /api/v1/workspaces` requires a valid session and lists only active memberships under active workspaces and organizations for that session user. It accepts no user selector.
+- `GET /api/v1/workspaces/current` requires a valid session and verified workspace selector. It returns the current organization, workspace, membership role/status, and effective permissions.
+- `GET /api/v1/workspaces/current/memberships` additionally requires `membership.read` and returns memberships scoped to the verified current workspace.
+- `POST /api/v1/workspaces/current/memberships` requires exact Origin and `membership.manage`. It accepts only an existing active user's email and a built-in role, returning HTTP 201. Owner assignment also requires `membership.manage_owner`.
+- `PATCH /api/v1/workspaces/current/memberships/:membershipId` requires exact Origin and `membership.manage`. It accepts only controlled `role` and/or `status` changes within the verified current workspace. Owner-sensitive changes require `membership.manage_owner`.
+
+Workspace-required endpoints accept exactly one canonical UUID in `X-Workspace-Id`. Missing returns HTTP 400 `workspace_context_required`; malformed or repeated returns HTTP 400 `workspace_context_invalid`; a valid inaccessible, nonexistent, or disabled selection returns HTTP 403 `workspace_access_denied`. The header is never authorization by itself and is resolved through PostgreSQL on every guarded request. There is no query/body override, selection cookie, or implicit fallback.
 
 ## Authentication endpoints
 
@@ -57,3 +68,5 @@ Future successful business responses will use:
 ```
 
 `/health`, `/ready`, and the explicit C04 authentication success shapes remain outside this future business success envelope. Pagination, idempotency keys, and WebSocket event naming remain future contract decisions.
+
+C06 safe error codes add `validation_error`, `workspace_context_required`, `workspace_context_invalid`, `workspace_access_denied`, `forbidden`, `membership_conflict`, `membership_not_found`, `member_user_unavailable`, and `last_owner_required`. Membership not-found responses occur only after the current workspace is authorized; cross-tenant selectors never reveal existence.

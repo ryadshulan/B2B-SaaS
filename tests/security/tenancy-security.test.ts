@@ -32,16 +32,16 @@ describe('C05 tenancy security boundaries', () => {
     );
   });
 
-  it('adds no public organization or workspace controller, route, or API dependency', async () => {
-    const apiFiles = await findSourceFiles('apps/api/src');
-    const apiSources = (await Promise.all(apiFiles.map((file) => readFile(file, 'utf8')))).join(
-      '\n',
-    );
-    const apiPackage = await readFile('apps/api/package.json', 'utf8');
+  it('keeps C05 free of transport code while C06 composes it through its public repository API', async () => {
+    const tenancyFiles = await findSourceFiles('packages/tenancy/src');
+    const tenancySources = (
+      await Promise.all(tenancyFiles.map((file) => readFile(file, 'utf8')))
+    ).join('\n');
+    const bootstrap = await readFile('packages/access/src/bootstrap-service.ts', 'utf8');
 
-    expect(apiSources).not.toMatch(/@Controller\(\s*['"](?:organizations|workspaces)['"]\s*\)/u);
-    expect(apiSources).not.toMatch(/@customer-ops\/tenancy/u);
-    expect(apiPackage).not.toMatch(/@customer-ops\/tenancy/u);
+    expect(tenancySources).not.toMatch(/@Controller|@nestjs/iu);
+    expect(bootstrap).toMatch(/createPostgresTenancyRepository/u);
+    expect(bootstrap).not.toMatch(/insertInto\(['"](?:organizations|workspaces)/u);
   });
 
   it('introduces no membership, RBAC, role, permission, or owner-user shortcut', async () => {
@@ -55,16 +55,15 @@ describe('C05 tenancy security boundaries', () => {
     expect(source).not.toMatch(/owner_user_id|membership|\brole\b|permission|\buser_id\b/iu);
   });
 
-  it('does not derive or trust workspace context from client-controlled input', async () => {
-    const apiFiles = await findSourceFiles('apps/api/src');
-    const apiSources = (await Promise.all(apiFiles.map((file) => readFile(file, 'utf8')))).join(
-      '\n',
-    );
+  it('keeps C05 independent from client workspace selection and delegates C06 verification to access', async () => {
+    const tenancyFiles = await findSourceFiles('packages/tenancy/src');
+    const tenancySources = (
+      await Promise.all(tenancyFiles.map((file) => readFile(file, 'utf8')))
+    ).join('\n');
+    const guard = await readFile('apps/api/src/access/workspace-access.guard.ts', 'utf8');
 
-    expect(apiSources).not.toMatch(
-      /x-workspace|workspace[_-]?id[^\n]*(?:header|query|body|cookie)/iu,
-    );
-    expect(apiSources).not.toMatch(/(?:header|query|body|cookie)[^\n]*workspace[_-]?id/iu);
+    expect(tenancySources).not.toMatch(/x-workspace|header|query|cookie/iu);
+    expect(guard).toMatch(/resolveWorkspaceAccess/u);
   });
 
   it('leaves C04 user and session migrations free of tenancy columns', async () => {

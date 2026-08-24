@@ -285,7 +285,7 @@ describe('PostgreSQL organization and workspace tenancy foundation', () => {
     expect(rows.map((row) => row.id)).toEqual(expect.arrayContaining([first.id, second.id]));
   });
 
-  it('preserves C04 auth tables and introduces no user ownership or membership schema', async () => {
+  it('preserves C04/C05 table shapes and leaves roles/permissions out of C05 persistence', async () => {
     const columns = await sql<{ table_name: string; column_name: string }>`
       select table_name, column_name
       from information_schema.columns
@@ -312,12 +312,15 @@ describe('PostgreSQL organization and workspace tenancy foundation', () => {
           or table_name like '%permission%'
         )
     `.execute(database.executor);
-    expect(forbiddenTables.rows).toStrictEqual([]);
+    expect(forbiddenTables.rows).toStrictEqual([{ table_name: 'workspace_memberships' }]);
   });
 
   it('supports latest/down/latest while leaving C04 tables intact', async () => {
     const migrationOptions = { migrationTableSchema: schema };
     try {
+      await expect(migrateDown(database, migrationOptions)).resolves.toMatchObject({
+        migrations: ['0004_c06_workspace_memberships_rbac'],
+      });
       await expect(migrateDown(database, migrationOptions)).resolves.toMatchObject({
         migrations: ['0003_c05_organizations_workspaces'],
       });
@@ -348,6 +351,7 @@ describe('PostgreSQL organization and workspace tenancy foundation', () => {
       { name: '0001_c02_database_baseline', status: 'applied' },
       { name: '0002_c04_authentication_foundation', status: 'applied' },
       { name: '0003_c05_organizations_workspaces', status: 'applied' },
+      { name: '0004_c06_workspace_memberships_rbac', status: 'applied' },
     ]);
   });
 });
