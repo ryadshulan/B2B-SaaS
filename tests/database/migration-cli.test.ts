@@ -101,6 +101,7 @@ describe('built migration CLI output contract', () => {
     expect(parsedStatus).toMatchObject([
       { name: '0001_c02_database_baseline', status: 'applied' },
       { name: '0002_c04_authentication_foundation', status: 'applied' },
+      { name: '0003_c05_organizations_workspaces', status: 'applied' },
     ]);
     expect(result.stdout).not.toContain('database.pool.created');
     expect(result.stdout).not.toContain('database.pool.closed');

@@ -8,6 +8,7 @@ describe('database migration registry', () => {
     expect(registeredMigrationNames).toStrictEqual([
       '0001_c02_database_baseline',
       '0002_c04_authentication_foundation',
+      '0003_c05_organizations_workspaces',
     ]);
     expect(Object.keys(migrations).sort()).toStrictEqual(registeredMigrationNames);
     expect(registeredMigrationNames.every((name) => /^\d{4}_[a-z0-9_]+$/u.test(name))).toBe(true);
@@ -17,10 +18,13 @@ describe('database migration registry', () => {
     const migrations = await new RegisteredMigrationProvider().getMigrations();
     const baseline = migrations['0001_c02_database_baseline'];
     const authentication = migrations['0002_c04_authentication_foundation'];
+    const tenancy = migrations['0003_c05_organizations_workspaces'];
 
     expect(typeof baseline?.up).toBe('function');
     expect(typeof baseline?.down).toBe('function');
     expect(typeof authentication?.up).toBe('function');
     expect(typeof authentication?.down).toBe('function');
+    expect(typeof tenancy?.up).toBe('function');
+    expect(typeof tenancy?.down).toBe('function');
   });
 });

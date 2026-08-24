@@ -11,6 +11,8 @@ Business REST routes belong below `/api/v1`. C01 does not add demonstration busi
 
 `/health` is process liveness and does not depend on PostgreSQL. `/ready` performs a fresh bounded database check, exposes no connection or failure details, and recovers without an API restart. Redis remains outside API readiness in C03 because the API does not consume queue infrastructure.
 
+C05 adds no public organization or workspace endpoint. Authentication alone does not establish tenant access; organization/workspace routes remain unavailable until C06 adds membership-aware authorization and trusted workspace resolution.
+
 ## Authentication endpoints
 
 The C04 browser-authentication routes are:
