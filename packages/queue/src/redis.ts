@@ -76,3 +76,41 @@ export async function closeRedisConnection(connection: Redis, force = false): Pr
     throw error;
   }
 }
+
+export interface RedisConnectionCloser {
+  close(this: void, force?: boolean): Promise<void>;
+}
+
+export function createRedisConnectionCloser(connection: Redis): RedisConnectionCloser {
+  let gracefulClosePromise: Promise<void> | undefined;
+  let forcedClosePromise: Promise<void> | undefined;
+  let closed = connection.status === 'end';
+
+  return {
+    close(force = false): Promise<void> {
+      if (closed) {
+        return forcedClosePromise ?? gracefulClosePromise ?? Promise.resolve();
+      }
+
+      if (force) {
+        forcedClosePromise ??= closeRedisConnection(connection, true).then(() => {
+          closed = true;
+        });
+        if (gracefulClosePromise !== undefined) {
+          void gracefulClosePromise.catch(() => undefined);
+        }
+        return forcedClosePromise;
+      }
+
+      if (forcedClosePromise !== undefined) {
+        return forcedClosePromise;
+      }
+
+      gracefulClosePromise ??= closeRedisConnection(connection, false).then(() => {
+        closed = true;
+      });
+      void gracefulClosePromise.catch(() => undefined);
+      return gracefulClosePromise;
+    },
+  };
+}

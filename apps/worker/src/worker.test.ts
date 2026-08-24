@@ -108,6 +108,26 @@ describe('WorkerApplication', () => {
     expect(output()).not.toContain('secret');
   });
 
+  it('treats stop before start as terminal and never constructs a queue worker', async () => {
+    const queueWorker = createQueueWorker();
+    const dependencies: WorkerApplicationDependencies = {
+      checkHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      createWorker: vi.fn(() => queueWorker),
+    };
+    const { logger, records } = createTestLogger();
+    const worker = new WorkerApplication(queueConfig, logger, dependencies);
+
+    await worker.stop('SIGTERM');
+    await worker.start();
+
+    expect(dependencies.checkHealth).not.toHaveBeenCalled();
+    expect(dependencies.createWorker).not.toHaveBeenCalled();
+    expect(records.map((record) => record.event)).toStrictEqual([
+      'worker.stopping',
+      'worker.stopped',
+    ]);
+  });
+
   it('keeps repeated startup and shutdown calls idempotent', async () => {
     const queueWorker = createQueueWorker();
     const dependencies: WorkerApplicationDependencies = {
@@ -156,5 +176,51 @@ describe('WorkerApplication', () => {
     expect(queueWorker.close).toHaveBeenNthCalledWith(2, true);
     expect(records.map((record) => record.event)).toContain('worker.shutdown.timeout');
     expect(records.at(-1)?.event).toBe('worker.stopped');
+  });
+
+  it('finishes stop and emits worker.stopped when a modeled Redis quit stays stuck', async () => {
+    let rejectQuit: ((error: Error) => void) | undefined;
+    const stuckRedisQuit = new Promise<void>((_resolve, reject) => {
+      rejectQuit = reject;
+    });
+    const disconnect = vi.fn();
+    const queueWorker = createQueueWorker({
+      close: vi.fn((force?: boolean) => {
+        if (force === true) {
+          disconnect();
+          return Promise.resolve();
+        }
+        return stuckRedisQuit;
+      }),
+    });
+    const dependencies: WorkerApplicationDependencies = {
+      checkHealth: vi.fn().mockResolvedValue({ healthy: true }),
+      createWorker: vi.fn(() => queueWorker),
+    };
+    const { logger, records } = createTestLogger();
+    const worker = new WorkerApplication(queueConfig, logger, dependencies);
+    await worker.start();
+
+    const startedAt = performance.now();
+    const stopping = worker.stop('SIGTERM');
+    let bound: NodeJS.Timeout | undefined;
+    await Promise.race([
+      stopping,
+      new Promise<never>((_resolve, reject) => {
+        bound = setTimeout(() => reject(new Error('Worker stop exceeded its bound')), 500);
+      }),
+    ]).finally(() => {
+      if (bound !== undefined) clearTimeout(bound);
+    });
+
+    expect(performance.now() - startedAt).toBeLessThan(500);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(queueWorker.close).toHaveBeenNthCalledWith(1, false);
+    expect(queueWorker.close).toHaveBeenNthCalledWith(2, true);
+    expect(records.map((record) => record.event)).toContain('worker.shutdown.timeout');
+    expect(records.at(-1)?.event).toBe('worker.stopped');
+
+    rejectQuit?.(new Error('late graceful Redis quit rejection'));
+    await new Promise<void>((resolve) => setImmediate(resolve));
   });
 });

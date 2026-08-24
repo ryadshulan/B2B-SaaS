@@ -1,6 +1,7 @@
 import { ConfigurationError, loadWorkerConfigFromEnvironment } from '@customer-ops/config';
 import { createLogger, type StructuredLogger } from '@customer-ops/logger';
 import { QueueOperationError } from '@customer-ops/queue';
+import { runWorkerLifecycle } from './lifecycle.js';
 import { WorkerApplication } from './worker.js';
 
 function safeFailureMetadata(error: unknown): Record<string, unknown> {
@@ -11,19 +12,6 @@ function safeFailureMetadata(error: unknown): Record<string, unknown> {
     queue_operation: error.operation,
     ...(error.errorCode === undefined ? {} : { error_code: error.errorCode }),
   };
-}
-
-async function waitForShutdown(worker: WorkerApplication): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const shutdown = (signal: NodeJS.Signals): void => {
-      process.off('SIGINT', shutdown);
-      process.off('SIGTERM', shutdown);
-      void worker.stop(signal).then(resolve, reject);
-    };
-
-    process.once('SIGINT', shutdown);
-    process.once('SIGTERM', shutdown);
-  });
 }
 
 async function bootstrap(): Promise<void> {
@@ -39,12 +27,9 @@ async function bootstrap(): Promise<void> {
       ...(config.appVersion === undefined ? {} : { version: config.appVersion }),
     });
     worker = new WorkerApplication(config.queue, logger);
-    await worker.start();
-    await waitForShutdown(worker);
+    await runWorkerLifecycle(worker);
   } catch (error) {
-    if (worker?.isRunning() === true) {
-      await worker.stop().catch(() => undefined);
-    }
+    await worker?.stop().catch(() => undefined);
 
     if (logger === undefined) {
       const safeMessage =

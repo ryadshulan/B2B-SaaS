@@ -1,6 +1,8 @@
 import type { QueueConfig } from '@customer-ops/config';
+import type { Redis } from 'ioredis';
 import { describe, expect, it } from 'vitest';
-import { createRedisOptions } from './redis.js';
+import { vi } from 'vitest';
+import { createRedisConnectionCloser, createRedisOptions } from './redis.js';
 
 const config: QueueConfig = {
   redisUrl: 'rediss://redis.example.test:6380',
@@ -42,5 +44,57 @@ describe('Redis connection options', () => {
       });
       expect(options.retryStrategy?.()).toBeNull();
     }
+  });
+});
+
+describe('owned Redis connection closure', () => {
+  it('forces disconnect without awaiting a stuck graceful quit', async () => {
+    let rejectQuit: ((error: Error) => void) | undefined;
+    const stuckQuit = new Promise<'OK'>((_resolve, reject) => {
+      rejectQuit = reject;
+    });
+    const quit = vi.fn(() => stuckQuit);
+    const disconnect = vi.fn();
+    const connection = {
+      status: 'ready',
+      quit,
+      disconnect,
+    } as unknown as Redis;
+    const closer = createRedisConnectionCloser(connection);
+
+    const gracefulClose = closer.close(false);
+    const observedGracefulClose = gracefulClose.catch((error: unknown) => error);
+    expect(quit).toHaveBeenCalledTimes(1);
+
+    const firstForcedClose = closer.close(true);
+    const secondForcedClose = closer.close(true);
+    expect(firstForcedClose).toBe(secondForcedClose);
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(disconnect).toHaveBeenCalledWith(false);
+    await firstForcedClose;
+
+    rejectQuit?.(new Error('late graceful quit failure'));
+    await expect(observedGracefulClose).resolves.toBeInstanceOf(Error);
+    expect(disconnect).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares successful graceful closure and keeps later force idempotent', async () => {
+    const quit = vi.fn().mockResolvedValue('OK');
+    const disconnect = vi.fn();
+    const connection = {
+      status: 'ready',
+      quit,
+      disconnect,
+    } as unknown as Redis;
+    const closer = createRedisConnectionCloser(connection);
+
+    const firstGracefulClose = closer.close(false);
+    const secondGracefulClose = closer.close(false);
+    expect(firstGracefulClose).toBe(secondGracefulClose);
+    await Promise.all([firstGracefulClose, secondGracefulClose]);
+    await closer.close(true);
+
+    expect(quit).toHaveBeenCalledTimes(1);
+    expect(disconnect).not.toHaveBeenCalled();
   });
 });

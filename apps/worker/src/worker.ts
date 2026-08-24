@@ -62,18 +62,31 @@ export class WorkerApplication {
     this.state = 'starting';
     this.logger.info({ event: 'worker.starting' }, 'Worker is starting');
 
-    const health = await this.dependencies.checkHealth(this.config, this.logger);
-    if (!health.healthy) {
-      this.state = 'stopped';
-      throw new QueueOperationError('health', new Error('Redis is unavailable'));
-    }
-
-    const queueWorker = this.dependencies.createWorker(this.config, this.logger);
-    this.queueWorker = queueWorker;
     try {
+      const health = await this.dependencies.checkHealth(this.config, this.logger);
+      if (this.state !== 'starting') {
+        return;
+      }
+      if (!health.healthy) {
+        throw new QueueOperationError('health', new Error('Redis is unavailable'));
+      }
+
+      const queueWorker = this.dependencies.createWorker(this.config, this.logger);
+      this.queueWorker = queueWorker;
+      if (this.state !== 'starting') {
+        await queueWorker.close(true).catch(() => undefined);
+        return;
+      }
+
       await queueWorker.start();
+      if (this.state !== 'starting') {
+        return;
+      }
     } catch (error) {
-      await queueWorker.close(true).catch(() => undefined);
+      if (this.state !== 'starting') {
+        return;
+      }
+      await this.queueWorker?.close(true).catch(() => undefined);
       this.state = 'stopped';
       throw error;
     }
@@ -83,47 +96,58 @@ export class WorkerApplication {
   }
 
   private async stopOnce(signal?: NodeJS.Signals): Promise<void> {
-    if (this.state === 'idle' || this.state === 'stopped') {
+    if (this.state === 'stopped') {
       return;
     }
 
+    const stoppingDuringStartup = this.state === 'idle' || this.state === 'starting';
     this.state = 'stopping';
     this.logger.info(
       { event: 'worker.stopping', ...(signal === undefined ? {} : { signal }) },
       'Worker is stopping',
     );
 
-    const queueWorker = this.queueWorker;
-    if (queueWorker !== undefined) {
-      await queueWorker.pause().catch(() => undefined);
-      const gracefulClose = queueWorker.close(false);
-      let timeout: NodeJS.Timeout | undefined;
-      const outcome = await Promise.race([
-        gracefulClose.then(
-          () => 'closed' as const,
-          () => 'failed' as const,
-        ),
-        new Promise<'timeout'>((resolve) => {
-          timeout = setTimeout(() => resolve('timeout'), this.config.shutdownTimeoutMs);
-          timeout.unref();
-        }),
-      ]);
-      if (timeout !== undefined) {
-        clearTimeout(timeout);
-      }
+    const startupPromise = stoppingDuringStartup ? this.startPromise : undefined;
+    try {
+      const queueWorker = this.queueWorker;
+      if (queueWorker !== undefined) {
+        if (stoppingDuringStartup) {
+          await queueWorker.close(true);
+        } else {
+          await queueWorker.pause().catch(() => undefined);
+          const gracefulClose = queueWorker.close(false);
+          let timeout: NodeJS.Timeout | undefined;
+          const outcome = await Promise.race([
+            gracefulClose.then(
+              () => 'closed' as const,
+              () => 'failed' as const,
+            ),
+            new Promise<'timeout'>((resolve) => {
+              timeout = setTimeout(() => resolve('timeout'), this.config.shutdownTimeoutMs);
+              timeout.unref();
+            }),
+          ]);
+          if (timeout !== undefined) {
+            clearTimeout(timeout);
+          }
 
-      if (outcome !== 'closed') {
-        this.logger.warn(
-          { event: outcome === 'timeout' ? 'worker.shutdown.timeout' : 'worker.shutdown.failed' },
-          outcome === 'timeout'
-            ? 'Worker graceful shutdown timed out'
-            : 'Worker graceful shutdown failed',
-        );
-        await queueWorker.close(true);
+          if (outcome !== 'closed') {
+            this.logger.warn(
+              {
+                event: outcome === 'timeout' ? 'worker.shutdown.timeout' : 'worker.shutdown.failed',
+              },
+              outcome === 'timeout'
+                ? 'Worker graceful shutdown timed out'
+                : 'Worker graceful shutdown failed',
+            );
+            await queueWorker.close(true);
+          }
+        }
       }
+      await startupPromise?.catch(() => undefined);
+    } finally {
+      this.state = 'stopped';
+      this.logger.info({ event: 'worker.stopped' }, 'Worker stopped');
     }
-
-    this.state = 'stopped';
-    this.logger.info({ event: 'worker.stopped' }, 'Worker stopped');
   }
 }

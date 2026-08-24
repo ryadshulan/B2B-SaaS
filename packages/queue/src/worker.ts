@@ -7,7 +7,7 @@ import {
   UnknownQueueJobError,
 } from './errors.js';
 import { resolveQueueName } from './names.js';
-import { closeRedisConnection, createRedisConnection } from './redis.js';
+import { createRedisConnection, createRedisConnectionCloser } from './redis.js';
 import type {
   QueueHandlerRegistry,
   QueueJobDefinitions,
@@ -41,6 +41,7 @@ export function createQueueWorker<Definitions extends QueueJobDefinitions>(
 ): QueueWorker {
   const queueName = resolveQueueName(options.queue);
   const connection = createRedisConnection(options.config, 'worker', options.logger);
+  const connectionCloser = createRedisConnectionCloser(connection);
   const startedAt = new Map<string, number>();
   const processor = createRegistryProcessor(options.handlers);
   const worker = new Worker<QueuePayload<Definitions>, unknown, QueueJobName<Definitions>>(
@@ -55,12 +56,8 @@ export function createQueueWorker<Definitions extends QueueJobDefinitions>(
   );
   let startPromise: Promise<void> | undefined;
   let gracefulClosePromise: Promise<void> | undefined;
-  let connectionClosePromise: Promise<void> | undefined;
-
-  const closeConnection = (force: boolean): Promise<void> => {
-    connectionClosePromise ??= closeRedisConnection(connection, force);
-    return connectionClosePromise;
-  };
+  let forcedClosePromise: Promise<void> | undefined;
+  let gracefullyClosed = false;
 
   worker.on('active', (job) => {
     if (job.id !== undefined) {
@@ -139,7 +136,7 @@ export function createQueueWorker<Definitions extends QueueJobDefinitions>(
           );
         } catch (error) {
           await worker.close(true).catch(() => undefined);
-          await closeConnection(true).catch(() => undefined);
+          await connectionCloser.close(true).catch(() => undefined);
           throw toQueueOperationError('worker_start', error);
         }
       })();
@@ -150,23 +147,37 @@ export function createQueueWorker<Definitions extends QueueJobDefinitions>(
     },
     close(force = false): Promise<void> {
       if (force) {
-        return (async () => {
+        if (gracefullyClosed) {
+          return gracefulClosePromise ?? Promise.resolve();
+        }
+        forcedClosePromise ??= (async () => {
           try {
-            await worker.close(true);
-            await closeConnection(true);
+            const connectionClose = connectionCloser.close(true);
+            const workerClose =
+              gracefulClosePromise === undefined ? worker.close(true) : worker.disconnect();
+            await Promise.all([workerClose, connectionClose]);
           } catch (error) {
             throw toQueueOperationError('shutdown', error);
           }
         })();
+        if (gracefulClosePromise !== undefined) {
+          void gracefulClosePromise.catch(() => undefined);
+        }
+        return forcedClosePromise;
+      }
+      if (forcedClosePromise !== undefined) {
+        return forcedClosePromise;
       }
       gracefulClosePromise ??= (async () => {
         try {
           await worker.close(false);
-          await closeConnection(false);
+          await connectionCloser.close(false);
+          gracefullyClosed = true;
         } catch (error) {
           throw toQueueOperationError('shutdown', error);
         }
       })();
+      void gracefulClosePromise.catch(() => undefined);
       return gracefulClosePromise;
     },
   };

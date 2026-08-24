@@ -44,9 +44,9 @@ Unknown jobs fail with a safe infrastructure error, remain failed evidence, and 
 
 ## Startup and shutdown
 
-Startup order is configuration validation, logger creation, `worker.starting`, bounded Redis PING, BullMQ worker construction/start, BullMQ readiness, then `worker.started`. Initial Redis unavailability closes partial resources, logs fixed safe metadata, and exits non-zero. After startup, normal ioredis/BullMQ reconnection handles temporary interruptions.
+Startup order is configuration validation, logger creation, signal-listener registration, `worker.starting`, bounded Redis PING, BullMQ worker construction/start, BullMQ readiness, then `worker.started`. A shutdown requested during health or readiness moves startup into the single shutdown flow, prevents `worker.started`, and closes any partial worker resource. Initial Redis unavailability closes partial resources, logs fixed safe metadata, and exits non-zero. After startup, normal ioredis/BullMQ reconnection handles temporary interruptions.
 
-On `SIGINT` or `SIGTERM`, one idempotent shutdown flow logs `worker.stopping`, pauses acquisition of new work, waits for active work within `WORKER_SHUTDOWN_TIMEOUT_MS`, closes BullMQ and owned Redis connections, forces supported BullMQ closure after timeout, then logs `worker.stopped`. Transactions or request context never carry queue resources.
+On `SIGINT` or `SIGTERM`, one idempotent shutdown flow logs `worker.stopping`, pauses acquisition of new work, waits for active work within `WORKER_SHUTDOWN_TIMEOUT_MS`, closes BullMQ and owned Redis connections, forces owned Redis/BullMQ disconnection after timeout without awaiting a stale graceful Redis quit, then logs `worker.stopped`. Repeated signals share that flow, and signal listeners are removed after completion or startup failure. Transactions or request context never carry queue resources.
 
 ## Health, errors, and logging
 

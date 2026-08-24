@@ -3,6 +3,7 @@ import { cleanupOwnedTestQueues } from '@customer-ops/queue/testing';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { createServer, type Socket } from 'node:net';
 import { describe, expect, it } from 'vitest';
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
@@ -27,6 +28,25 @@ async function terminateProcess(child: ChildProcessWithoutNullStreams): Promise<
     child.kill('SIGTERM');
   }
   await once(child, 'exit');
+}
+
+async function waitForExitWithin(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number,
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  let timeout: NodeJS.Timeout | undefined;
+  await Promise.race([
+    once(child, 'exit'),
+    new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(
+        () => reject(new Error('Worker process did not exit in time')),
+        timeoutMs,
+      );
+    }),
+  ]).finally(() => {
+    if (timeout !== undefined) clearTimeout(timeout);
+  });
 }
 
 describe('production worker process', () => {
@@ -135,5 +155,77 @@ describe('production worker process', () => {
     expect(output).not.toContain(credentialUrl);
     expect(output).not.toContain('startup-user');
     expect(output).not.toContain('startup-password');
+  });
+
+  it('handles termination while the real process is waiting on Redis startup', async () => {
+    const sockets = new Set<Socket>();
+    const stalledRedis = createServer((socket) => {
+      sockets.add(socket);
+      socket.on('error', () => undefined);
+      socket.on('close', () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve, reject) => {
+      stalledRedis.once('error', reject);
+      stalledRedis.listen(0, '127.0.0.1', resolve);
+    });
+    const address = stalledRedis.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('Failed to allocate the startup-race test port');
+    }
+
+    const credentialUrl = `redis://startup-race-user:startup-race-password@127.0.0.1:${address.port}`;
+    const child = spawn(process.execPath, ['apps/worker/dist/main.js'], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        APP_NAME: 'customer-operations-platform',
+        LOG_LEVEL: 'info',
+        REDIS_URL: credentialUrl,
+        QUEUE_PREFIX: `customer-ops:test:${randomUUID()}`,
+        WORKER_CONCURRENCY: '1',
+        REDIS_CONNECT_TIMEOUT_MS: '1000',
+        REDIS_HEALTH_TIMEOUT_MS: '1000',
+        WORKER_SHUTDOWN_TIMEOUT_MS: '500',
+      },
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8');
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
+
+    try {
+      await waitForOutput(() => stdout, '"event":"worker.starting"', 5_000);
+      if (process.platform === 'win32') {
+        child.kill();
+      } else {
+        child.kill('SIGTERM');
+      }
+      await waitForExitWithin(child, 4_000);
+
+      const output = `${stdout}\n${stderr}`;
+      expect(stdout).not.toContain('"event":"worker.started"');
+      expect(output).not.toContain(credentialUrl);
+      expect(output).not.toContain('startup-race-user');
+      expect(output).not.toContain('startup-race-password');
+      if (process.platform !== 'win32') {
+        expect(stdout.match(/"event":"worker\.stopping"/gu)).toHaveLength(1);
+        expect(stdout.match(/"event":"worker\.stopped"/gu)).toHaveLength(1);
+        expect(stdout).not.toContain('"event":"worker.bootstrap.failed"');
+        expect(child.exitCode).toBe(0);
+      }
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        await terminateProcess(child);
+      }
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) => {
+        stalledRedis.close((error) => (error === undefined ? resolve() : reject(error)));
+      });
+    }
   });
 });
