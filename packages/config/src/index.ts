@@ -33,7 +33,18 @@ export interface DatabaseRuntimeConfig extends RuntimeConfig {
   database: DatabaseConfig;
 }
 
-export type WorkerConfig = RuntimeConfig;
+export interface QueueConfig {
+  redisUrl: string;
+  prefix: string;
+  workerConcurrency: number;
+  connectTimeoutMs: number;
+  healthTimeoutMs: number;
+  shutdownTimeoutMs: number;
+}
+
+export interface WorkerConfig extends RuntimeConfig {
+  queue: QueueConfig;
+}
 
 export interface ConfigurationIssue {
   field: string;
@@ -112,6 +123,39 @@ const databaseSchemaShape = {
   DB_IDLE_TRANSACTION_TIMEOUT_MS: positiveBoundedInteger(30_000, 300_000),
 };
 
+const redisUrlSchema = z
+  .string()
+  .trim()
+  .min(1, 'must be a non-empty Redis URL')
+  .max(2048, 'must be at most 2048 characters')
+  .superRefine((value, context) => {
+    try {
+      const url = new URL(value);
+      if ((url.protocol !== 'redis:' && url.protocol !== 'rediss:') || url.hostname === '') {
+        context.addIssue({ code: 'custom', message: 'must be a valid Redis URL' });
+      }
+    } catch {
+      context.addIssue({ code: 'custom', message: 'must be a valid Redis URL' });
+    }
+  });
+
+const queueSchemaShape = {
+  REDIS_URL: redisUrlSchema,
+  QUEUE_PREFIX: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(
+      /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u,
+      'must start with an alphanumeric character and contain only letters, numbers, dot, underscore, colon, or hyphen',
+    )
+    .default('customer-ops'),
+  WORKER_CONCURRENCY: positiveBoundedInteger(5, 100),
+  REDIS_CONNECT_TIMEOUT_MS: positiveBoundedInteger(5_000, 60_000),
+  REDIS_HEALTH_TIMEOUT_MS: positiveBoundedInteger(2_000, 30_000),
+  WORKER_SHUTDOWN_TIMEOUT_MS: positiveBoundedInteger(15_000, 120_000),
+};
+
 const apiSchema = z.object({
   ...baseSchemaShape,
   ...databaseSchemaShape,
@@ -123,7 +167,7 @@ const apiSchema = z.object({
     .default(3001),
 });
 
-const workerSchema = z.object(baseSchemaShape);
+const workerSchema = z.object({ ...baseSchemaShape, ...queueSchemaShape });
 const databaseSchema = z.object(databaseSchemaShape);
 const databaseRuntimeSchema = z.object({ ...baseSchemaShape, ...databaseSchemaShape });
 
@@ -135,7 +179,12 @@ function parseConfig<T>(schema: z.ZodType<T>, environment: EnvironmentSource): T
   return result.data;
 }
 
-function toRuntimeConfig(parsed: z.output<typeof workerSchema>): RuntimeConfig {
+function toRuntimeConfig(parsed: z.output<typeof workerSchema>): RuntimeConfig;
+function toRuntimeConfig(parsed: z.output<typeof apiSchema>): RuntimeConfig;
+function toRuntimeConfig(parsed: z.output<typeof databaseRuntimeSchema>): RuntimeConfig;
+function toRuntimeConfig(
+  parsed: z.output<typeof workerSchema | typeof apiSchema | typeof databaseRuntimeSchema>,
+): RuntimeConfig {
   return {
     environment: parsed.NODE_ENV,
     appName: parsed.APP_NAME,
@@ -144,6 +193,17 @@ function toRuntimeConfig(parsed: z.output<typeof workerSchema>): RuntimeConfig {
     ...(parsed.OTEL_EXPORTER_OTLP_ENDPOINT === undefined
       ? {}
       : { otelExporterOtlpEndpoint: parsed.OTEL_EXPORTER_OTLP_ENDPOINT }),
+  };
+}
+
+function toQueueConfig(parsed: z.output<typeof workerSchema>): QueueConfig {
+  return {
+    redisUrl: parsed.REDIS_URL,
+    prefix: parsed.QUEUE_PREFIX,
+    workerConcurrency: parsed.WORKER_CONCURRENCY,
+    connectTimeoutMs: parsed.REDIS_CONNECT_TIMEOUT_MS,
+    healthTimeoutMs: parsed.REDIS_HEALTH_TIMEOUT_MS,
+    shutdownTimeoutMs: parsed.WORKER_SHUTDOWN_TIMEOUT_MS,
   };
 }
 
@@ -168,7 +228,8 @@ export function loadApiConfig(environment: EnvironmentSource): ApiConfig {
 }
 
 export function loadWorkerConfig(environment: EnvironmentSource): WorkerConfig {
-  return toRuntimeConfig(parseConfig(workerSchema, environment));
+  const parsed = parseConfig(workerSchema, environment);
+  return { ...toRuntimeConfig(parsed), queue: toQueueConfig(parsed) };
 }
 
 export function loadDatabaseConfig(environment: EnvironmentSource): DatabaseConfig {
