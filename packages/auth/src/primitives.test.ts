@@ -36,7 +36,8 @@ describe('authentication primitives', () => {
     const password = 'correct horse battery staple';
     const passwordHash = await hasher.hash(password);
 
-    expect(passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,p=1,t=2\$/u);
+    expect(passwordHash).toMatch(/^\$argon2id\$v=19\$/u);
+    expect(passwordHash.split('$')[3]?.split(',').sort()).toStrictEqual(['m=19456', 'p=1', 't=2']);
     expect(passwordHash).not.toContain(password);
     await expect(hasher.verify(passwordHash, password)).resolves.toBe(true);
     await expect(hasher.verify(passwordHash, 'wrong password value')).resolves.toBe(false);
