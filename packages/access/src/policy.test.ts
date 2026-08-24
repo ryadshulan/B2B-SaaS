@@ -8,47 +8,94 @@ import {
 } from './policy';
 import { PERMISSIONS, WORKSPACE_ROLES, type WorkspaceRole } from './types';
 
+const EXPECTED_ROLES = [
+  'owner',
+  'admin',
+  'supervisor',
+  'agent',
+  'marketing',
+  'analyst',
+] as const;
+
+const EXPECTED_PERMISSIONS = [
+  'organization.read',
+  'organization.update',
+  'workspace.read',
+  'workspace.update',
+  'membership.read',
+  'membership.manage',
+  'membership.manage_owner',
+] as const;
+
+const EXPECTED_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly string[]> = {
+  owner: EXPECTED_PERMISSIONS,
+  admin: [
+    'organization.read',
+    'organization.update',
+    'workspace.read',
+    'workspace.update',
+    'membership.read',
+    'membership.manage',
+  ],
+  supervisor: ['organization.read', 'workspace.read', 'membership.read'],
+  agent: ['workspace.read'],
+  marketing: ['workspace.read'],
+  analyst: ['workspace.read'],
+};
+
 describe('workspace role permission policy', () => {
   it('defines exactly the six built-in roles and the small C06 permission catalog', () => {
-    expect(WORKSPACE_ROLES).toStrictEqual([
-      'owner',
-      'admin',
-      'supervisor',
-      'agent',
-      'marketing',
-      'analyst',
-    ]);
-    expect(PERMISSIONS).toStrictEqual([
-      'organization.read',
-      'organization.update',
-      'workspace.read',
-      'workspace.update',
-      'membership.read',
-      'membership.manage',
-      'membership.manage_owner',
-    ]);
+    expect(WORKSPACE_ROLES).toStrictEqual(EXPECTED_ROLES);
+    expect(PERMISSIONS).toStrictEqual(EXPECTED_PERMISSIONS);
   });
 
   it('maps every role to its exact explicit permission set', () => {
-    const expected: Record<WorkspaceRole, readonly string[]> = {
-      owner: [...PERMISSIONS],
-      admin: [
-        'organization.read',
-        'organization.update',
-        'workspace.read',
-        'workspace.update',
-        'membership.read',
-        'membership.manage',
-      ],
-      supervisor: ['organization.read', 'workspace.read', 'membership.read'],
-      agent: ['workspace.read'],
-      marketing: ['workspace.read'],
-      analyst: ['workspace.read'],
-    };
-    expect(ROLE_PERMISSIONS).toStrictEqual(expected);
+    expect(ROLE_PERMISSIONS).toStrictEqual(EXPECTED_ROLE_PERMISSIONS);
     for (const role of WORKSPACE_ROLES) {
-      expect(permissionsForRole(role)).toStrictEqual(expected[role]);
+      expect(permissionsForRole(role)).toStrictEqual(EXPECTED_ROLE_PERMISSIONS[role]);
     }
+    expect(permissionsForRole('owner')).toStrictEqual(EXPECTED_PERMISSIONS);
+  });
+
+  it('freezes both catalogs, the role mapping, and every nested permission collection', () => {
+    expect(Object.isFrozen(WORKSPACE_ROLES)).toBe(true);
+    expect(Object.isFrozen(PERMISSIONS)).toBe(true);
+    expect(Object.isFrozen(ROLE_PERMISSIONS)).toBe(true);
+    for (const role of EXPECTED_ROLES) {
+      expect(Object.isFrozen(ROLE_PERMISSIONS[role])).toBe(true);
+    }
+  });
+
+  it('does not expose mutable shared policy through permissionsForRole', () => {
+    const agentPermissions = permissionsForRole('agent') as unknown as string[];
+
+    expect(() => agentPermissions.push('membership.manage')).toThrow(TypeError);
+    expect(() => agentPermissions.splice(0, 1, 'membership.manage')).toThrow(TypeError);
+    expect(() => {
+      agentPermissions[0] = 'membership.manage';
+    }).toThrow(TypeError);
+
+    expect(ROLE_PERMISSIONS.agent).toStrictEqual(['workspace.read']);
+    expect(roleHasPermission('agent', 'membership.manage')).toBe(false);
+  });
+
+  it('protects role and permission recognition from runtime catalog mutation', () => {
+    const mutablePermissions = PERMISSIONS as unknown as string[];
+    const mutableRoles = WORKSPACE_ROLES as unknown as string[];
+
+    expect(() => mutablePermissions.push('membership.delete')).toThrow(TypeError);
+    expect(() => {
+      mutablePermissions[0] = 'membership.delete';
+    }).toThrow(TypeError);
+    expect(() => mutableRoles.push('administrator')).toThrow(TypeError);
+    expect(() => {
+      mutableRoles[0] = 'administrator';
+    }).toThrow(TypeError);
+
+    expect(isPermission('membership.delete')).toBe(false);
+    expect(isPermission('organization.read')).toBe(true);
+    expect(isWorkspaceRole('administrator')).toBe(false);
+    expect(isWorkspaceRole('owner')).toBe(true);
   });
 
   it('fails closed for unknown roles and permissions', () => {

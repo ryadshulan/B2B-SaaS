@@ -11,27 +11,24 @@ export type WorkspaceMembershipId = string & {
   readonly [workspaceMembershipIdBrand]: 'WorkspaceMembershipId';
 };
 
-export const WORKSPACE_ROLES = [
-  'owner',
-  'admin',
-  'supervisor',
-  'agent',
-  'marketing',
-  'analyst',
-] as const;
+export const WORKSPACE_ROLES = Object.freeze(
+  ['owner', 'admin', 'supervisor', 'agent', 'marketing', 'analyst'] as const,
+);
 
 export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
 export type WorkspaceMembershipStatus = 'active' | 'disabled';
 
-export const PERMISSIONS = [
-  'organization.read',
-  'organization.update',
-  'workspace.read',
-  'workspace.update',
-  'membership.read',
-  'membership.manage',
-  'membership.manage_owner',
-] as const;
+export const PERMISSIONS = Object.freeze(
+  [
+    'organization.read',
+    'organization.update',
+    'workspace.read',
+    'workspace.update',
+    'membership.read',
+    'membership.manage',
+    'membership.manage_owner',
+  ] as const,
+);
 
 export type Permission = (typeof PERMISSIONS)[number];
 

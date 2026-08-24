@@ -1,22 +1,26 @@
 import { PERMISSIONS, WORKSPACE_ROLES, type Permission, type WorkspaceRole } from './types';
 
-const allPermissions: readonly Permission[] = PERMISSIONS;
+const NO_PERMISSIONS: readonly Permission[] = Object.freeze([]);
 
 export const ROLE_PERMISSIONS: Readonly<Record<WorkspaceRole, readonly Permission[]>> =
   Object.freeze({
-    owner: allPermissions,
-    admin: [
-      'organization.read',
-      'organization.update',
-      'workspace.read',
-      'workspace.update',
-      'membership.read',
-      'membership.manage',
-    ],
-    supervisor: ['organization.read', 'workspace.read', 'membership.read'],
-    agent: ['workspace.read'],
-    marketing: ['workspace.read'],
-    analyst: ['workspace.read'],
+    owner: PERMISSIONS,
+    admin: Object.freeze(
+      [
+        'organization.read',
+        'organization.update',
+        'workspace.read',
+        'workspace.update',
+        'membership.read',
+        'membership.manage',
+      ] as const,
+    ),
+    supervisor: Object.freeze(
+      ['organization.read', 'workspace.read', 'membership.read'] as const,
+    ),
+    agent: Object.freeze(['workspace.read'] as const),
+    marketing: Object.freeze(['workspace.read'] as const),
+    analyst: Object.freeze(['workspace.read'] as const),
   });
 
 export function isWorkspaceRole(value: unknown): value is WorkspaceRole {
@@ -28,7 +32,7 @@ export function isPermission(value: unknown): value is Permission {
 }
 
 export function permissionsForRole(role: unknown): readonly Permission[] {
-  return isWorkspaceRole(role) ? ROLE_PERMISSIONS[role] : [];
+  return isWorkspaceRole(role) ? ROLE_PERMISSIONS[role] : NO_PERMISSIONS;
 }
 
 export function roleHasPermission(role: unknown, permission: unknown): boolean {
