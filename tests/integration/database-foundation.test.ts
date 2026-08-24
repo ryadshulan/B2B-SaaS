@@ -203,30 +203,38 @@ describe('PostgreSQL database foundation', () => {
     expect(await getMigrationStatus(runtime, options)).toStrictEqual([
       { name: '0001_c02_database_baseline', status: 'pending' },
       { name: '0002_c04_authentication_foundation', status: 'pending' },
+      { name: '0003_c05_organizations_workspaces', status: 'pending' },
     ]);
     await expect(migrateToLatest(runtime, options)).resolves.toMatchObject({
       direction: 'latest',
-      migrations: ['0001_c02_database_baseline', '0002_c04_authentication_foundation'],
+      migrations: [
+        '0001_c02_database_baseline',
+        '0002_c04_authentication_foundation',
+        '0003_c05_organizations_workspaces',
+      ],
     });
     expect(await getMigrationStatus(runtime, options)).toMatchObject([
       { name: '0001_c02_database_baseline', status: 'applied' },
       { name: '0002_c04_authentication_foundation', status: 'applied' },
+      { name: '0003_c05_organizations_workspaces', status: 'applied' },
     ]);
     await expect(migrateToLatest(runtime, options)).resolves.toMatchObject({ migrations: [] });
 
     await expect(migrateDown(runtime, options)).resolves.toMatchObject({
       direction: 'down',
-      migrations: ['0002_c04_authentication_foundation'],
+      migrations: ['0003_c05_organizations_workspaces'],
     });
     expect(await getMigrationStatus(runtime, options)).toStrictEqual([
       expect.objectContaining({ name: '0001_c02_database_baseline', status: 'applied' }),
-      { name: '0002_c04_authentication_foundation', status: 'pending' },
+      expect.objectContaining({ name: '0002_c04_authentication_foundation', status: 'applied' }),
+      { name: '0003_c05_organizations_workspaces', status: 'pending' },
     ]);
 
     await Promise.all([migrateToLatest(runtime, options), migrateToLatest(runtime, options)]);
     expect(await getMigrationStatus(runtime, options)).toMatchObject([
       { name: '0001_c02_database_baseline', status: 'applied' },
       { name: '0002_c04_authentication_foundation', status: 'applied' },
+      { name: '0003_c05_organizations_workspaces', status: 'applied' },
     ]);
 
     const metadataTables = await sql<{ table_name: string }>`
@@ -240,7 +248,9 @@ describe('PostgreSQL database foundation', () => {
       'auth_sessions',
       'kysely_migration',
       'kysely_migration_lock',
+      'organizations',
       'users',
+      'workspaces',
     ]);
   });
 

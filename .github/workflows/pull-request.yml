@@ -70,6 +70,7 @@ jobs:
       - run: pnpm test:database
       - run: pnpm test:queue
       - run: pnpm test:auth
+      - run: pnpm test:tenancy
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

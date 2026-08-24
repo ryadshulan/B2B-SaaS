@@ -23,6 +23,9 @@ importers:
       '@customer-ops/queue':
         specifier: workspace:*
         version: link:packages/queue
+      '@customer-ops/tenancy':
+        specifier: workspace:*
+        version: link:packages/tenancy
       '@eslint/js':
         specifier: 9.39.2
         version: 9.39.2
@@ -196,6 +199,12 @@ importers:
       ioredis:
         specifier: 6.0.0
         version: 6.0.0
+
+  packages/tenancy:
+    dependencies:
+      '@customer-ops/database':
+        specifier: workspace:*
+        version: link:../database
 
   packages/testing: {}
 

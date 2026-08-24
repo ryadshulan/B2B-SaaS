@@ -8,6 +8,7 @@
 - Normal application code must use `@customer-ops/config` instead of reading `process.env` directly.
 - Application code must obtain database access through `@customer-ops/database`; never construct pools in applications.
 - Tenant-owned repositories must require explicit trusted workspace scope and may not expose unscoped lookups.
+- Organizations are account containers and workspaces are operational tenant boundaries; without membership/RBAC, expose no public tenancy routes or client-selected workspace context.
 - Never log SQL parameter values or database credentials. Applied migrations are immutable.
 - Raw Redis/BullMQ construction belongs to `@customer-ops/queue`; never log job payloads or Redis credentials.
 - Retried side effects require idempotent handlers. Redis tests never use `FLUSHALL` or `FLUSHDB`.
