@@ -2,7 +2,7 @@
 
 ## Identity and credential model
 
-C04 users remain global identities after C05 introduces organization and workspace records. Users and sessions do not carry a workspace, organization, membership, role, or permission, and organization/workspace rows contain no owner user. A valid session proves only the global user identity; C06 tenant routes must independently establish workspace membership, authorize the action, and scope every repository call.
+C04 users remain global identities after C05 introduces organization/workspace records and C06 introduces memberships. Users, authenticated principals, and sessions do not carry a workspace, organization, membership, role, or permission, and organization/workspace rows contain no owner user. A valid session proves only the global user identity. C06 tenant routes independently resolve an active workspace membership, authorize explicit permissions, and scope every repository call. Switching the requested workspace never changes the session or cookie.
 
 Registration trims only outer email whitespace, validates a maximum of 254 characters, stores the display email, and stores a separate lowercase lookup value. PostgreSQL's unique `email_normalized` constraint is the final duplicate-race control. Passwords are 12 through 256 Unicode code points, are not trimmed or normalized, and are hashed before the registration transaction where practical.
 

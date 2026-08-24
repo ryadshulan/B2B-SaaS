@@ -10,7 +10,15 @@ export type ApplicationErrorCode =
   | 'invalid_credentials'
   | 'unauthenticated'
   | 'origin_mismatch'
-  | 'duplicate_registration';
+  | 'duplicate_registration'
+  | 'workspace_context_required'
+  | 'workspace_context_invalid'
+  | 'workspace_access_denied'
+  | 'forbidden'
+  | 'membership_conflict'
+  | 'membership_not_found'
+  | 'member_user_unavailable'
+  | 'last_owner_required';
 
 export interface ApplicationErrorOptions {
   code: ApplicationErrorCode;
