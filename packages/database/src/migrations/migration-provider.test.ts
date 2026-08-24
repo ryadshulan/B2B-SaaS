@@ -5,7 +5,10 @@ describe('database migration registry', () => {
   it('uses immutable deterministic sortable migration names', async () => {
     const migrations = await new RegisteredMigrationProvider().getMigrations();
 
-    expect(registeredMigrationNames).toStrictEqual(['0001_c02_database_baseline']);
+    expect(registeredMigrationNames).toStrictEqual([
+      '0001_c02_database_baseline',
+      '0002_c04_authentication_foundation',
+    ]);
     expect(Object.keys(migrations).sort()).toStrictEqual(registeredMigrationNames);
     expect(registeredMigrationNames.every((name) => /^\d{4}_[a-z0-9_]+$/u.test(name))).toBe(true);
   });
@@ -13,8 +16,11 @@ describe('database migration registry', () => {
   it('provides explicit forward and backward migration functions', async () => {
     const migrations = await new RegisteredMigrationProvider().getMigrations();
     const baseline = migrations['0001_c02_database_baseline'];
+    const authentication = migrations['0002_c04_authentication_foundation'];
 
     expect(typeof baseline?.up).toBe('function');
     expect(typeof baseline?.down).toBe('function');
+    expect(typeof authentication?.up).toBe('function');
+    expect(typeof authentication?.down).toBe('function');
   });
 });

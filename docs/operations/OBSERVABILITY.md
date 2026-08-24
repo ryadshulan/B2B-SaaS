@@ -6,26 +6,28 @@
 
 Current variables are:
 
-| Variable                         | Required | Default        | Constraint                             |
-| -------------------------------- | -------- | -------------- | -------------------------------------- |
-| `NODE_ENV`                       | No       | `development`  | `development`, `test`, or `production` |
-| `APP_NAME`                       | Yes      | None           | Trimmed, 1–128 characters              |
-| `APP_VERSION`                    | No       | None           | At most 256 characters                 |
-| `API_PORT`                       | API only | `3001`         | Integer from 1 through 65535           |
-| `LOG_LEVEL`                      | No       | `info`         | `debug`, `info`, `warn`, or `error`    |
-| `DATABASE_URL`                   | API/DB   | None           | Non-empty `postgres`/`postgresql` URL  |
-| `DB_POOL_MAX`                    | No       | `10`           | Integer from 1 through 100             |
-| `DB_CONNECTION_TIMEOUT_MS`       | No       | `5000`         | Integer from 1 through 60000           |
-| `DB_IDLE_TIMEOUT_MS`             | No       | `30000`        | Integer from 1 through 600000          |
-| `DB_STATEMENT_TIMEOUT_MS`        | No       | `15000`        | Integer from 1 through 300000          |
-| `DB_IDLE_TRANSACTION_TIMEOUT_MS` | No       | `30000`        | Integer from 1 through 300000          |
-| `REDIS_URL`                      | Worker   | None           | Valid `redis`/`rediss` URL             |
-| `QUEUE_PREFIX`                   | No       | `customer-ops` | 1-128 safe name characters             |
-| `WORKER_CONCURRENCY`             | No       | `5`            | Integer from 1 through 100             |
-| `REDIS_CONNECT_TIMEOUT_MS`       | No       | `5000`         | Integer from 1 through 60000           |
-| `REDIS_HEALTH_TIMEOUT_MS`        | No       | `2000`         | Integer from 1 through 30000           |
-| `WORKER_SHUTDOWN_TIMEOUT_MS`     | No       | `15000`        | Integer from 1 through 120000          |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`    | No       | None           | Valid URL reserved for later use       |
+| Variable                         | Required | Default        | Constraint                                |
+| -------------------------------- | -------- | -------------- | ----------------------------------------- |
+| `NODE_ENV`                       | No       | `development`  | `development`, `test`, or `production`    |
+| `APP_NAME`                       | Yes      | None           | Trimmed, 1–128 characters                 |
+| `APP_VERSION`                    | No       | None           | At most 256 characters                    |
+| `API_PORT`                       | API only | `3001`         | Integer from 1 through 65535              |
+| `WEB_ORIGIN`                     | API only | None           | Exact HTTP(S) origin; HTTPS in production |
+| `AUTH_SESSION_TTL_SECONDS`       | No       | `604800`       | Integer from 300 through 2592000          |
+| `LOG_LEVEL`                      | No       | `info`         | `debug`, `info`, `warn`, or `error`       |
+| `DATABASE_URL`                   | API/DB   | None           | Non-empty `postgres`/`postgresql` URL     |
+| `DB_POOL_MAX`                    | No       | `10`           | Integer from 1 through 100                |
+| `DB_CONNECTION_TIMEOUT_MS`       | No       | `5000`         | Integer from 1 through 60000              |
+| `DB_IDLE_TIMEOUT_MS`             | No       | `30000`        | Integer from 1 through 600000             |
+| `DB_STATEMENT_TIMEOUT_MS`        | No       | `15000`        | Integer from 1 through 300000             |
+| `DB_IDLE_TRANSACTION_TIMEOUT_MS` | No       | `30000`        | Integer from 1 through 300000             |
+| `REDIS_URL`                      | Worker   | None           | Valid `redis`/`rediss` URL                |
+| `QUEUE_PREFIX`                   | No       | `customer-ops` | 1-128 safe name characters                |
+| `WORKER_CONCURRENCY`             | No       | `5`            | Integer from 1 through 100                |
+| `REDIS_CONNECT_TIMEOUT_MS`       | No       | `5000`         | Integer from 1 through 60000              |
+| `REDIS_HEALTH_TIMEOUT_MS`        | No       | `2000`         | Integer from 1 through 30000              |
+| `WORKER_SHUTDOWN_TIMEOUT_MS`     | No       | `15000`        | Integer from 1 through 120000             |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`    | No       | None           | Valid URL reserved for later use          |
 
 The API and migration CLI validate database settings. The worker validates Redis/queue settings and does not require database configuration. Object-storage and provider settings remain future variables. Invalid values fail startup. Validation errors identify only the field and failed constraint and never include database or Redis URL values.
 
@@ -44,6 +46,8 @@ The minimum C01 events are:
 C02 adds `database.pool.created`, `database.pool.closed`, `database.pool.error`, `database.health.failed`, `database.migration.started`, `database.migration.completed`, and `database.migration.failed`. Database events never include SQL text, parameter values, connection strings, or raw driver errors.
 
 C03 adds `worker.starting`, `redis.connection.ready`, `redis.connection.error`, `redis.health.failed`, `queue.worker.ready`, `queue.worker.error`, `queue.job.completed`, `queue.job.failed`, `worker.shutdown.timeout`, and the existing worker stop events. Job records may include queue, bounded job name/ID, attempt, and duration. They never include job data, result values, handler errors, connection strings, usernames, or passwords.
+
+C04 adds `auth.registration.succeeded`, `auth.registration.failed`, `auth.login.succeeded`, `auth.login.failed`, `auth.session.invalid`, `auth.logout.succeeded`, and `auth.logout_all.succeeded`. Success events may include the server-established user UUID. Failure events contain only a fixed reason. Auth logs never contain request bodies, raw login emails, cookies, passwords or password hashes, raw session tokens, or token hashes.
 
 The logger censors common credentials recursively before serialization. This includes authorization and cookie headers, passwords and hashes, access/refresh tokens, generic token/secret/API key fields, application and Meta secrets, database/Redis URLs, and S3 secret keys. Callers must still keep credentials out of log messages and must never log complete request bodies, response bodies, headers, or environment objects.
 

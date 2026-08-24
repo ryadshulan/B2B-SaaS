@@ -4,6 +4,7 @@
 - Respect application, package, and backend module boundaries; keep controllers thin.
 - Never bypass workspace tenant isolation or RBAC, even temporarily.
 - Never expose, commit, or log secrets. Validate every external input.
+- Never store or log raw authentication session tokens; unsafe cookie-auth routes must enforce the configured exact Origin.
 - Normal application code must use `@customer-ops/config` instead of reading `process.env` directly.
 - Application code must obtain database access through `@customer-ops/database`; never construct pools in applications.
 - Tenant-owned repositories must require explicit trusted workspace scope and may not expose unscoped lookups.

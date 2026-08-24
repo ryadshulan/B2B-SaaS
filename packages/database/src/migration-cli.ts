@@ -1,5 +1,6 @@
 import { ConfigurationError, loadDatabaseRuntimeConfigFromEnvironment } from '@customer-ops/config';
 import { createLogger, type StructuredLogger } from '@customer-ops/logger';
+import { sql } from 'kysely';
 import { createDatabase } from './database';
 import { DatabaseOperationError } from './errors';
 import { getMigrationStatus, migrateDown, migrateToLatest } from './migrations';
@@ -19,16 +20,25 @@ async function executeCommand(
   database: DatabaseRuntime,
   logger: StructuredLogger,
 ): Promise<void> {
+  const schemaResult = await sql<{ schemaName: string | null }>`
+    select current_schema() as "schemaName"
+  `.execute(database.executor);
+  const migrationTableSchema = schemaResult.rows[0]?.schemaName;
+  if (migrationTableSchema === undefined || migrationTableSchema === null) {
+    throw new Error('PostgreSQL current schema is unavailable');
+  }
+  const migrationOptions = { logger, migrationTableSchema };
+
   if (command === 'status') {
-    const status = await getMigrationStatus(database);
+    const status = await getMigrationStatus(database, migrationOptions);
     process.stdout.write(`${JSON.stringify(status)}\n`);
     return;
   }
   if (command === 'latest') {
-    await migrateToLatest(database, { logger });
+    await migrateToLatest(database, migrationOptions);
     return;
   }
-  await migrateDown(database, { logger });
+  await migrateDown(database, migrationOptions);
 }
 
 async function main(): Promise<void> {

@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { loadDatabaseConfigFromEnvironment } from '@customer-ops/config';
+import { createDatabase, type DatabaseRuntime } from '@customer-ops/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 type MigrationCommand = 'latest' | 'down' | 'status';
@@ -62,16 +64,23 @@ function expectNoCredentials(result: ProcessResult, databaseUrl: string): void {
 
 describe('built migration CLI output contract', () => {
   let cliDatabaseUrl: string;
-  let restorePendingState = false;
+  let adminDatabase: DatabaseRuntime;
+  const schema = `c04_cli_${randomUUID().replaceAll('-', '')}`;
+
+  function assertOwnedSchema(): void {
+    if (!/^c04_cli_[0-9a-f]{32}$/u.test(schema)) {
+      throw new Error('Refusing to clean a schema not owned by the migration CLI test');
+    }
+  }
 
   beforeAll(async () => {
-    cliDatabaseUrl = loadDatabaseConfigFromEnvironment().url;
-    const initialStatus = await runMigrationCli('status', cliDatabaseUrl);
-    if (initialStatus.exitCode !== 0) {
-      throw new Error('Could not inspect the initial migration state for the CLI test');
-    }
-    const parsedInitialStatus = JSON.parse(initialStatus.stdout) as Array<{ status?: unknown }>;
-    restorePendingState = parsedInitialStatus[0]?.status === 'pending';
+    const config = loadDatabaseConfigFromEnvironment();
+    adminDatabase = createDatabase({ config: { ...config, maxConnections: 1 } });
+    assertOwnedSchema();
+    await adminDatabase.executor.schema.createSchema(schema).execute();
+    const url = new URL(config.url);
+    url.searchParams.set('options', `-csearch_path=${schema}`);
+    cliDatabaseUrl = url.toString();
     const setup = await runMigrationCli('latest', cliDatabaseUrl);
     if (setup.exitCode !== 0) {
       throw new Error('Could not prepare the baseline migration for the CLI test');
@@ -79,12 +88,9 @@ describe('built migration CLI output contract', () => {
   });
 
   afterAll(async () => {
-    if (restorePendingState) {
-      const restore = await runMigrationCli('down', cliDatabaseUrl);
-      if (restore.exitCode !== 0) {
-        throw new Error('Could not restore the initial migration state after the CLI test');
-      }
-    }
+    assertOwnedSchema();
+    await adminDatabase.executor.schema.dropSchema(schema).cascade().execute();
+    await adminDatabase.close();
   });
 
   it('emits exactly one parseable status document on stdout and logs to stderr', async () => {
@@ -92,7 +98,10 @@ describe('built migration CLI output contract', () => {
     expect(result.exitCode, result.stderr).toBe(0);
     const parsedStatus = JSON.parse(result.stdout) as unknown;
 
-    expect(parsedStatus).toMatchObject([{ name: '0001_c02_database_baseline', status: 'applied' }]);
+    expect(parsedStatus).toMatchObject([
+      { name: '0001_c02_database_baseline', status: 'applied' },
+      { name: '0002_c04_authentication_foundation', status: 'applied' },
+    ]);
     expect(result.stdout).not.toContain('database.pool.created');
     expect(result.stdout).not.toContain('database.pool.closed');
     expect(result.stderr).toContain('database.pool.created');

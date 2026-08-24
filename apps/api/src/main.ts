@@ -23,7 +23,15 @@ async function bootstrap(): Promise<void> {
       ...(config.appVersion === undefined ? {} : { version: config.appVersion }),
     });
     database = createDatabase({ config: config.database, logger });
-    application = await createApiApplication({ logger, database });
+    application = await createApiApplication({
+      logger,
+      database,
+      auth: {
+        webOrigin: config.auth.webOrigin,
+        sessionTtlSeconds: config.auth.sessionTtlSeconds,
+        secureCookies: config.environment === 'production',
+      },
+    });
     await application.listen(config.port, '0.0.0.0');
     logger.info({ event: 'api.started', port: config.port }, 'API is ready to receive traffic');
   } catch (error) {

@@ -16,6 +16,7 @@
     "test": "turbo test && pnpm test:integration && pnpm test:e2e && pnpm test:security",
     "test:database": "turbo build --filter=@customer-ops/database && vitest run --config vitest.database.config.ts",
     "test:queue": "turbo build --filter=@customer-ops/queue --filter=@customer-ops/worker && vitest run --config vitest.queue.config.ts",
+    "test:auth": "turbo build --filter=@customer-ops/auth --filter=@customer-ops/api --filter=@customer-ops/database && vitest run --config vitest.auth.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:security": "vitest run --config vitest.security.config.ts",
@@ -25,6 +26,7 @@
     "db:migrate:status": "turbo build --filter=@customer-ops/database && pnpm --filter @customer-ops/database db:migrate:status"
   },
   "devDependencies": {
+    "@customer-ops/auth": "workspace:*",
     "@customer-ops/config": "workspace:*",
     "@customer-ops/database": "workspace:*",
     "@customer-ops/logger": "workspace:*",

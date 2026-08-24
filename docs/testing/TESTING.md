@@ -8,4 +8,6 @@ C03 unit tests cover Redis URL/prefix/concurrency/timeout validation, role-speci
 
 Run the PostgreSQL suite with `pnpm test:database`; `pnpm test:integration` also includes it. Run the Redis/BullMQ suite with `pnpm test:queue`. GitHub Actions supplies safe local Compose URLs after dependency health passes.
 
+C04 unit tests cover email/password validation, exact password preservation, Argon2id hashing/verification/rehash detection, dummy verification, opaque-token entropy and hashing, service orchestration, logout behavior, cookie construction, and secret-safe logs. `pnpm test:auth` additionally runs real PostgreSQL repository/migration tests, a same-normalized-email registration race, HTTP endpoint flows, exact-origin credentialed CORS, Origin rejection, cookie attributes including production `Secure`, and static security-boundary checks. Authentication database tests use generated verified `c04_*` schemas and never change or drop arbitrary schemas or databases.
+
 Future tests must emphasize tenant-crossing denial, RBAC denial, validation failures, idempotency, retries, provider adapter contracts, and database transaction behavior. Prefer deterministic tests; introduce containers and fixtures only with the infrastructure they validate.

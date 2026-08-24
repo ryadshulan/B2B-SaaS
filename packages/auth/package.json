@@ -1,5 +1,21 @@
 {
-  "name": "@customer-ops/auth", "version": "0.0.0", "private": true, "type": "module",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc --noEmit", "test": "vitest run --passWithNoTests" }
+  "name": "@customer-ops/auth",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@customer-ops/database": "workspace:*",
+    "@customer-ops/logger": "workspace:*",
+    "argon2": "0.45.1"
+  }
 }
