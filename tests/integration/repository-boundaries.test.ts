@@ -14,6 +14,7 @@ describe('repository package boundaries', () => {
       'queue',
       'tenancy',
       'access',
+      'teams',
       'testing',
     ];
     await expect(

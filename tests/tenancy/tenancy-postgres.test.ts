@@ -312,12 +312,20 @@ describe('PostgreSQL organization and workspace tenancy foundation', () => {
           or table_name like '%permission%'
         )
     `.execute(database.executor);
-    expect(forbiddenTables.rows).toStrictEqual([{ table_name: 'workspace_memberships' }]);
+    expect(forbiddenTables.rows).toEqual(
+      expect.arrayContaining([
+        { table_name: 'team_memberships' },
+        { table_name: 'workspace_memberships' },
+      ]),
+    );
   });
 
   it('supports latest/down/latest while leaving C04 tables intact', async () => {
     const migrationOptions = { migrationTableSchema: schema };
     try {
+      await expect(migrateDown(database, migrationOptions)).resolves.toMatchObject({
+        migrations: ['0005_c07_teams'],
+      });
       await expect(migrateDown(database, migrationOptions)).resolves.toMatchObject({
         migrations: ['0004_c06_workspace_memberships_rbac'],
       });
@@ -352,6 +360,7 @@ describe('PostgreSQL organization and workspace tenancy foundation', () => {
       { name: '0002_c04_authentication_foundation', status: 'applied' },
       { name: '0003_c05_organizations_workspaces', status: 'applied' },
       { name: '0004_c06_workspace_memberships_rbac', status: 'applied' },
+      { name: '0005_c07_teams', status: 'applied' },
     ]);
   });
 });

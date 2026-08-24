@@ -5,22 +5,26 @@ const NO_PERMISSIONS: readonly Permission[] = Object.freeze([]);
 export const ROLE_PERMISSIONS: Readonly<Record<WorkspaceRole, readonly Permission[]>> =
   Object.freeze({
     owner: PERMISSIONS,
-    admin: Object.freeze(
-      [
-        'organization.read',
-        'organization.update',
-        'workspace.read',
-        'workspace.update',
-        'membership.read',
-        'membership.manage',
-      ] as const,
-    ),
-    supervisor: Object.freeze(
-      ['organization.read', 'workspace.read', 'membership.read'] as const,
-    ),
-    agent: Object.freeze(['workspace.read'] as const),
-    marketing: Object.freeze(['workspace.read'] as const),
-    analyst: Object.freeze(['workspace.read'] as const),
+    admin: Object.freeze([
+      'organization.read',
+      'organization.update',
+      'workspace.read',
+      'workspace.update',
+      'membership.read',
+      'membership.manage',
+      'team.read',
+      'team.manage',
+    ] as const),
+    supervisor: Object.freeze([
+      'organization.read',
+      'workspace.read',
+      'membership.read',
+      'team.read',
+      'team.manage',
+    ] as const),
+    agent: Object.freeze(['workspace.read', 'team.read'] as const),
+    marketing: Object.freeze(['workspace.read', 'team.read'] as const),
+    analyst: Object.freeze(['workspace.read', 'team.read'] as const),
   });
 
 export function isWorkspaceRole(value: unknown): value is WorkspaceRole {

@@ -207,8 +207,8 @@ describe('C06 access security boundaries', () => {
     expect(policy).toMatch(/ROLE_PERMISSIONS/u);
   });
 
-  it('introduces no C07 teams/channels/messages, business jobs, or client-controlled RLS', async () => {
-    for (const directory of ['packages/teams', 'packages/channels', 'packages/messages']) {
+  it('introduces no C08 channels/messages, business jobs, or client-controlled RLS', async () => {
+    for (const directory of ['packages/channels', 'packages/messages']) {
       await expect(access(directory)).rejects.toBeDefined();
     }
     const files = [

@@ -18,7 +18,13 @@ export type ApplicationErrorCode =
   | 'membership_conflict'
   | 'membership_not_found'
   | 'member_user_unavailable'
-  | 'last_owner_required';
+  | 'last_owner_required'
+  | 'team_not_found'
+  | 'team_name_conflict'
+  | 'team_disabled'
+  | 'team_member_unavailable'
+  | 'team_membership_not_found'
+  | 'team_membership_conflict';
 
 export interface ApplicationErrorOptions {
   code: ApplicationErrorCode;

@@ -525,6 +525,9 @@ describe('PostgreSQL memberships and RBAC foundation', () => {
     const options = { migrationTableSchema: schema };
     try {
       await expect(migrateDown(database, options)).resolves.toMatchObject({
+        migrations: ['0005_c07_teams'],
+      });
+      await expect(migrateDown(database, options)).resolves.toMatchObject({
         migrations: ['0004_c06_workspace_memberships_rbac'],
       });
       const relations = await sql<{
@@ -553,6 +556,7 @@ describe('PostgreSQL memberships and RBAC foundation', () => {
       { name: '0002_c04_authentication_foundation', status: 'applied' },
       { name: '0003_c05_organizations_workspaces', status: 'applied' },
       { name: '0004_c06_workspace_memberships_rbac', status: 'applied' },
+      { name: '0005_c07_teams', status: 'applied' },
     ]);
   });
 });

@@ -10,16 +10,18 @@ The verified request context contains safe identity and authorization fields: us
 
 ## Built-in roles and permissions
 
-| Role       | organization.read | organization.update | workspace.read | workspace.update | membership.read | membership.manage | membership.manage_owner |
-| ---------- | ----------------- | ------------------- | -------------- | ---------------- | --------------- | ----------------- | ----------------------- |
-| owner      | yes               | yes                 | yes            | yes              | yes             | yes               | yes                     |
-| admin      | yes               | yes                 | yes            | yes              | yes             | yes               | no                      |
-| supervisor | yes               | no                  | yes            | no               | yes             | no                | no                      |
-| agent      | no                | no                  | yes            | no               | no              | no                | no                      |
-| marketing  | no                | no                  | yes            | no               | no              | no                | no                      |
-| analyst    | no                | no                  | yes            | no               | no              | no                | no                      |
+| Role       | organization.read | organization.update | workspace.read | workspace.update | membership.read | membership.manage | membership.manage_owner | team.read | team.manage |
+| ---------- | ----------------- | ------------------- | -------------- | ---------------- | --------------- | ----------------- | ----------------------- | --------- | ----------- |
+| owner      | yes               | yes                 | yes            | yes              | yes             | yes               | yes                     | yes       | yes         |
+| admin      | yes               | yes                 | yes            | yes              | yes             | yes               | no                      | yes       | yes         |
+| supervisor | yes               | no                  | yes            | no               | yes             | no                | no                      | yes       | yes         |
+| agent      | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          |
+| marketing  | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          |
+| analyst    | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          |
 
 The mapping is explicit, not a numeric hierarchy. Unknown role or permission values fail closed. Only `membership.manage_owner` may assign, promote, demote, disable, or otherwise alter an owner-level membership. Custom roles and persisted role/permission tables are deferred.
+
+The C07 extension adds exactly `team.read` and `team.manage`. Every built-in role may read teams. Only owner, admin, and supervisor may create or update teams and manage team memberships. The permission catalog, role catalog, mapping object, and every nested permission array remain runtime-frozen.
 
 ## Membership management
 
@@ -29,10 +31,16 @@ Every workspace must retain at least one active owner. Owner-sensitive mutations
 
 Unsafe organization and membership writes require the configured exact `Origin`, followed by session authentication and the applicable workspace/permission guards. Controllers contain no SQL and do not implement role-string authorization.
 
+## Team grouping
+
+Team membership is operational grouping only. It references an existing same-workspace `workspace_membership` and never grants workspace access, changes the upstream role, or contributes permissions. All team routes reuse the verified C06 current-workspace context and central permission guard. Team IDs are resolved with `context.workspaceId`; team-membership IDs are further scoped by team. Cross-workspace and nonexistent identifiers share safe not-found or unavailable responses.
+
+Adding or reactivating a team member requires an active team, active target workspace membership in the current workspace, and active target user. Disabling a team or team membership does not disable or otherwise mutate C06 access. Effective team membership is a display/operational state, not an authorization input. C07 defines no team-level roles.
+
 ## Bootstrap and future isolation
 
 `POST /api/v1/organizations` is a self-bootstrap route and therefore does not require an existing workspace header. It obtains the owner user ID only from the authenticated C04 principal and atomically inserts the organization, initial workspace, and active owner membership through one transaction-bound composition of the C05 and C06 repositories.
 
 PostgreSQL is the membership and authorization source of truth. Future operational records will carry `workspace_id`. Future row-level security may add defense in depth using server-derived context, but it will not accept a client workspace selector or replace application authorization.
 
-Invitations, email delivery, custom roles, organization memberships, and C07 teams are deferred.
+Invitations, email delivery, custom roles, organization memberships, team roles, channels, and routing/assignment are deferred.

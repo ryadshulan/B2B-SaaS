@@ -26,6 +26,9 @@ importers:
       '@customer-ops/queue':
         specifier: workspace:*
         version: link:packages/queue
+      '@customer-ops/teams':
+        specifier: workspace:*
+        version: link:packages/teams
       '@customer-ops/tenancy':
         specifier: workspace:*
         version: link:packages/tenancy
@@ -80,6 +83,9 @@ importers:
       '@customer-ops/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@customer-ops/teams':
+        specifier: workspace:*
+        version: link:../../packages/teams
       '@customer-ops/tenancy':
         specifier: workspace:*
         version: link:../../packages/tenancy
@@ -217,6 +223,18 @@ importers:
       ioredis:
         specifier: 6.0.0
         version: 6.0.0
+
+  packages/teams:
+    dependencies:
+      '@customer-ops/access':
+        specifier: workspace:*
+        version: link:../access
+      '@customer-ops/database':
+        specifier: workspace:*
+        version: link:../database
+      '@customer-ops/tenancy':
+        specifier: workspace:*
+        version: link:../tenancy
 
   packages/tenancy:
     dependencies:
