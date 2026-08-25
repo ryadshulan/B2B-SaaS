@@ -25,3 +25,9 @@ Display names accept Arabic and other Unicode scripts. Validation rejects non-st
 C05 itself exposes no organization or workspace HTTP controller. C06 now exposes a self-bootstrap organization route and membership-scoped workspace routes through the separate API access module. These routes use the C05 package only through its public repository contract.
 
 Client headers, queries, bodies, and cookies do not establish trusted workspace context. `X-Workspace-Id` expresses a request only; C06 resolves the active user, membership, workspace, and organization server-side, authorizes the permission, and passes explicit trusted workspace scope forward. There is no arbitrary first-workspace fallback. Future row-level security is defense in depth after that resolution; it is not an authorization substitute and must never rely on client-controlled workspace selection.
+
+## Teams inside the tenant boundary
+
+C07 teams are workspace-owned operational records. `teams.workspace_id` establishes ownership, while `team_memberships` links a team to a C06 `workspace_membership` in that same workspace. Composite PostgreSQL foreign keys enforce both relationships. Every team route first establishes the existing C06 `WorkspaceAccessContext`, every repository lookup includes that trusted workspace ID, and no body, query, route, cookie, or team membership can override it.
+
+Team membership is not tenant membership and grants no workspace access or RBAC permission. Disabling a team or team membership does not change the upstream workspace membership. There are no team roles, nested teams, or hard deletion in C07; see [workspace teams](TEAMS.md).

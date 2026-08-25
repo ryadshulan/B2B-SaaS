@@ -36,7 +36,7 @@ export class AccessModule {
         WorkspaceAccessGuard,
         WorkspacePermissionGuard,
       ],
-      exports: [ACCESS_SERVICE, WorkspaceAccessGuard, WorkspacePermissionGuard],
+      exports: [AuthModule, ACCESS_SERVICE, WorkspaceAccessGuard, WorkspacePermissionGuard],
     };
   }
 }

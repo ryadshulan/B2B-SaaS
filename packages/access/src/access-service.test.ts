@@ -104,7 +104,13 @@ describe('AccessService', () => {
     await expect(service.resolveWorkspaceAccess('user', workspaceId)).resolves.toMatchObject({
       membershipId,
       role: 'supervisor',
-      permissions: ['organization.read', 'workspace.read', 'membership.read'],
+      permissions: [
+        'organization.read',
+        'workspace.read',
+        'membership.read',
+        'team.read',
+        'team.manage',
+      ],
     });
     mocks.resolveWorkspaceAccess.mockResolvedValue(undefined);
     await expect(service.resolveWorkspaceAccess('user', workspaceId)).rejects.toMatchObject({

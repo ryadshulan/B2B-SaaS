@@ -24,6 +24,20 @@ C06 adds membership-aware organization/workspace endpoints. Authentication alone
 
 Workspace-required endpoints accept exactly one canonical UUID in `X-Workspace-Id`. Missing returns HTTP 400 `workspace_context_required`; malformed or repeated returns HTTP 400 `workspace_context_invalid`; a valid inaccessible, nonexistent, or disabled selection returns HTTP 403 `workspace_access_denied`. The header is never authorization by itself and is resolved through PostgreSQL on every guarded request. There is no query/body override, selection cookie, or implicit fallback.
 
+## Team endpoints
+
+All C07 routes require session authentication, the C06 workspace access guard, and the permission guard. They accept no `workspaceId` body, query, or path override; all team identifiers are resolved with the verified `WorkspaceAccessContext.workspaceId`. Unsafe routes additionally require exact `WEB_ORIGIN`.
+
+- `GET /api/v1/workspaces/current/teams` requires `team.read` and lists teams only in the current workspace.
+- `POST /api/v1/workspaces/current/teams` requires exact Origin and `team.manage`, accepts exactly `{ "name": string }`, and returns HTTP 201.
+- `GET /api/v1/workspaces/current/teams/:teamId` requires `team.read` and returns a disabled or active team inside the current workspace.
+- `PATCH /api/v1/workspaces/current/teams/:teamId` requires exact Origin and `team.manage`, accepts only one or both of `name` and `status`, rejects an empty patch, and never hard-deletes.
+- `GET /api/v1/workspaces/current/teams/:teamId/members` requires `team.read`. Each item contains safe team-membership ID/status/effective state, workspace-membership ID/role/status, and user ID/email/status.
+- `POST /api/v1/workspaces/current/teams/:teamId/members` requires exact Origin and `team.manage`, accepts exactly `{ "workspaceMembershipId": UUID }`, rejects `userId`, and returns HTTP 201.
+- `PATCH /api/v1/workspaces/current/teams/:teamId/members/:teamMembershipId` requires exact Origin and `team.manage`, accepts exactly `{ "status": "active" | "disabled" }`, and scopes the membership by current workspace plus team.
+
+Team names are trimmed and NFC-normalized before persistence. Exact normalized duplicates inside one workspace return HTTP 409 `team_name_conflict`; case remains significant and another workspace may reuse the name. Existing active or disabled team-member relationships return HTTP 409 `team_membership_conflict`. A disabled team returns HTTP 409 `team_disabled` when an add or reactivation is attempted. Other-workspace, nonexistent, disabled-membership, and disabled-user targets all return HTTP 404 `team_member_unavailable`. Cross-workspace and nonexistent team UUIDs both return HTTP 404 `team_not_found` after the current workspace has already been authorized.
+
 ## Authentication endpoints
 
 The C04 browser-authentication routes are:
@@ -69,4 +83,4 @@ Future successful business responses will use:
 
 `/health`, `/ready`, and the explicit C04 authentication success shapes remain outside this future business success envelope. Pagination, idempotency keys, and WebSocket event naming remain future contract decisions.
 
-C06 safe error codes add `validation_error`, `workspace_context_required`, `workspace_context_invalid`, `workspace_access_denied`, `forbidden`, `membership_conflict`, `membership_not_found`, `member_user_unavailable`, and `last_owner_required`. Membership not-found responses occur only after the current workspace is authorized; cross-tenant selectors never reveal existence.
+C06 safe error codes add `validation_error`, `workspace_context_required`, `workspace_context_invalid`, `workspace_access_denied`, `forbidden`, `membership_conflict`, `membership_not_found`, `member_user_unavailable`, and `last_owner_required`. C07 adds `team_not_found`, `team_name_conflict`, `team_disabled`, `team_member_unavailable`, `team_membership_not_found`, and `team_membership_conflict`. Membership not-found responses occur only after the current workspace is authorized; cross-tenant selectors never reveal existence.

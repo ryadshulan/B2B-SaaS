@@ -8,14 +8,7 @@ import {
 } from './policy';
 import { PERMISSIONS, WORKSPACE_ROLES, type WorkspaceRole } from './types';
 
-const EXPECTED_ROLES = [
-  'owner',
-  'admin',
-  'supervisor',
-  'agent',
-  'marketing',
-  'analyst',
-] as const;
+const EXPECTED_ROLES = ['owner', 'admin', 'supervisor', 'agent', 'marketing', 'analyst'] as const;
 
 const EXPECTED_PERMISSIONS = [
   'organization.read',
@@ -25,6 +18,8 @@ const EXPECTED_PERMISSIONS = [
   'membership.read',
   'membership.manage',
   'membership.manage_owner',
+  'team.read',
+  'team.manage',
 ] as const;
 
 const EXPECTED_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly string[]> = {
@@ -36,11 +31,19 @@ const EXPECTED_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly string[]> = {
     'workspace.update',
     'membership.read',
     'membership.manage',
+    'team.read',
+    'team.manage',
   ],
-  supervisor: ['organization.read', 'workspace.read', 'membership.read'],
-  agent: ['workspace.read'],
-  marketing: ['workspace.read'],
-  analyst: ['workspace.read'],
+  supervisor: [
+    'organization.read',
+    'workspace.read',
+    'membership.read',
+    'team.read',
+    'team.manage',
+  ],
+  agent: ['workspace.read', 'team.read'],
+  marketing: ['workspace.read', 'team.read'],
+  analyst: ['workspace.read', 'team.read'],
 };
 
 describe('workspace role permission policy', () => {
@@ -75,7 +78,7 @@ describe('workspace role permission policy', () => {
       agentPermissions[0] = 'membership.manage';
     }).toThrow(TypeError);
 
-    expect(ROLE_PERMISSIONS.agent).toStrictEqual(['workspace.read']);
+    expect(ROLE_PERMISSIONS.agent).toStrictEqual(['workspace.read', 'team.read']);
     expect(roleHasPermission('agent', 'membership.manage')).toBe(false);
   });
 
@@ -110,6 +113,15 @@ describe('workspace role permission policy', () => {
     expect(roleHasPermission('owner', 'membership.manage_owner')).toBe(true);
     for (const role of WORKSPACE_ROLES.filter((candidate) => candidate !== 'owner')) {
       expect(roleHasPermission(role, 'membership.manage_owner')).toBe(false);
+    }
+  });
+
+  it('grants team management only to owner, admin, and supervisor while every role can read', () => {
+    for (const role of WORKSPACE_ROLES) {
+      expect(roleHasPermission(role, 'team.read')).toBe(true);
+      expect(roleHasPermission(role, 'team.manage')).toBe(
+        role === 'owner' || role === 'admin' || role === 'supervisor',
+      );
     }
   });
 });

@@ -15,6 +15,7 @@
     "@customer-ops/config": "workspace:*",
     "@customer-ops/database": "workspace:*",
     "@customer-ops/logger": "workspace:*",
+    "@customer-ops/teams": "workspace:*",
     "@customer-ops/tenancy": "workspace:*",
     "@nestjs/common": "11.1.9",
     "@nestjs/core": "11.1.9",
