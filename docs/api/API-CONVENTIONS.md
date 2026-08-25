@@ -38,6 +38,22 @@ All C07 routes require session authentication, the C06 workspace access guard, a
 
 Team names are trimmed and NFC-normalized before persistence. Exact normalized duplicates inside one workspace return HTTP 409 `team_name_conflict`; case remains significant and another workspace may reuse the name. Existing active or disabled team-member relationships return HTTP 409 `team_membership_conflict`. A disabled team returns HTTP 409 `team_disabled` when an add or reactivation is attempted. Other-workspace, nonexistent, disabled-membership, and disabled-user targets all return HTTP 404 `team_member_unavailable`. Cross-workspace and nonexistent team UUIDs both return HTTP 404 `team_not_found` after the current workspace has already been authorized.
 
+## Channel endpoints
+
+C08 exposes only safe workspace-scoped reads. Both routes require session authentication, the C06
+workspace access guard, `channel.read`, and exactly one verified `X-Workspace-Id`:
+
+- `GET /api/v1/workspaces/current/channels` lists Channels only in the current workspace.
+- `GET /api/v1/workspaces/current/channels/:channelId` resolves the UUID only with the current
+  workspace. Known cross-workspace and nonexistent UUIDs both return HTTP 404 `channel_not_found`.
+
+Each public channel summary contains `id`, `providerKey`, `displayName`, `status`,
+`hasExternalIdentity`, `createdAt`, and `updatedAt`. It excludes `workspaceId`, raw `externalRef`, and
+all credential/token fields. C08 accepts no channel `workspaceId` through body, query, or route and
+exposes no create, provider selection, bind, disable, reactivate, onboarding, credential, or internal
+route-resolution endpoint. The reserved `channel.manage` permission is for C09/C10 provider-mediated
+management routes.
+
 ## Authentication endpoints
 
 The C04 browser-authentication routes are:
@@ -83,4 +99,4 @@ Future successful business responses will use:
 
 `/health`, `/ready`, and the explicit C04 authentication success shapes remain outside this future business success envelope. Pagination, idempotency keys, and WebSocket event naming remain future contract decisions.
 
-C06 safe error codes add `validation_error`, `workspace_context_required`, `workspace_context_invalid`, `workspace_access_denied`, `forbidden`, `membership_conflict`, `membership_not_found`, `member_user_unavailable`, and `last_owner_required`. C07 adds `team_not_found`, `team_name_conflict`, `team_disabled`, `team_member_unavailable`, `team_membership_not_found`, and `team_membership_conflict`. Membership not-found responses occur only after the current workspace is authorized; cross-tenant selectors never reveal existence.
+C06 safe error codes add `validation_error`, `workspace_context_required`, `workspace_context_invalid`, `workspace_access_denied`, `forbidden`, `membership_conflict`, `membership_not_found`, `member_user_unavailable`, and `last_owner_required`. C07 adds `team_not_found`, `team_name_conflict`, `team_disabled`, `team_member_unavailable`, `team_membership_not_found`, and `team_membership_conflict`. C08 public reads add `channel_not_found`; transport-neutral channel lifecycle also defines safe identity-conflict, already-bound, identity-required, invalid-state, and provider-not-registered codes for internal/future composition. Not-found responses occur only after the current workspace is authorized; cross-tenant selectors never reveal existence.

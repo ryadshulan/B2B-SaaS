@@ -31,3 +31,13 @@ Client headers, queries, bodies, and cookies do not establish trusted workspace 
 C07 teams are workspace-owned operational records. `teams.workspace_id` establishes ownership, while `team_memberships` links a team to a C06 `workspace_membership` in that same workspace. Composite PostgreSQL foreign keys enforce both relationships. Every team route first establishes the existing C06 `WorkspaceAccessContext`, every repository lookup includes that trusted workspace ID, and no body, query, route, cookie, or team membership can override it.
 
 Team membership is not tenant membership and grants no workspace access or RBAC permission. Disabling a team or team membership does not change the upstream workspace membership. There are no team roles, nested teams, or hard deletion in C07; see [workspace teams](TEAMS.md).
+
+## Channels inside the tenant boundary
+
+C08 Channels belong to exactly one workspace through `channels.workspace_id`. Every public channel
+route first establishes C06 `WorkspaceAccessContext`, and every ID lookup includes that trusted
+workspace ID. A client channel ID, provider key, or external reference cannot select or authorize a
+workspace. The sole global provider/external-reference resolver is internal infrastructure for future
+provider routing and is never an authorization input. Its owning workspace comes only from the unique
+server-owned mapping. Channels add no state to authentication sessions or workspace context; see
+[workspace channels](CHANNELS.md).

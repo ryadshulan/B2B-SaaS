@@ -2,6 +2,7 @@ import type { DatabaseRuntime } from '@customer-ops/database';
 import type { StructuredLogger } from '@customer-ops/logger';
 import { Module, type DynamicModule } from '@nestjs/common';
 import type { AuthHttpConfig } from './auth/auth-config';
+import { ChannelsModule } from './channels/channels.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { TeamsModule } from './teams/teams.module';
@@ -19,6 +20,7 @@ export class AppModule {
         DatabaseModule.register(database),
         HealthModule,
         TeamsModule.register(authConfig, logger),
+        ChannelsModule.register(authConfig, logger),
       ],
     };
   }

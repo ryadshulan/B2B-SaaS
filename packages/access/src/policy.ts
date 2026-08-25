@@ -14,6 +14,8 @@ export const ROLE_PERMISSIONS: Readonly<Record<WorkspaceRole, readonly Permissio
       'membership.manage',
       'team.read',
       'team.manage',
+      'channel.read',
+      'channel.manage',
     ] as const),
     supervisor: Object.freeze([
       'organization.read',
@@ -21,10 +23,11 @@ export const ROLE_PERMISSIONS: Readonly<Record<WorkspaceRole, readonly Permissio
       'membership.read',
       'team.read',
       'team.manage',
+      'channel.read',
     ] as const),
-    agent: Object.freeze(['workspace.read', 'team.read'] as const),
-    marketing: Object.freeze(['workspace.read', 'team.read'] as const),
-    analyst: Object.freeze(['workspace.read', 'team.read'] as const),
+    agent: Object.freeze(['workspace.read', 'team.read', 'channel.read'] as const),
+    marketing: Object.freeze(['workspace.read', 'team.read', 'channel.read'] as const),
+    analyst: Object.freeze(['workspace.read', 'team.read', 'channel.read'] as const),
   });
 
 export function isWorkspaceRole(value: unknown): value is WorkspaceRole {

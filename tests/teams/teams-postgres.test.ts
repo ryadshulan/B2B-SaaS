@@ -965,12 +965,15 @@ describe('PostgreSQL workspace teams foundation', () => {
     expect(access.permissions).not.toContain('team.manage');
   });
 
-  it('supports exact latest/down/latest and removes only C07 tables/constraint while preserving C06 data', async () => {
+  it('supports exact latest/down/latest through C07 while preserving C06 data', async () => {
     const { workspace } = await createTenant();
     const user = await createUser(`down-${randomUUID()}@example.test`);
     const membership = await createWorkspaceMembership(workspace.id, user.id, 'owner');
     const options = { migrationTableSchema: schema };
     try {
+      await expect(migrateDown(database, options)).resolves.toMatchObject({
+        migrations: ['0006_c08_channels'],
+      });
       await expect(migrateDown(database, options)).resolves.toMatchObject({
         migrations: ['0005_c07_teams'],
       });
@@ -1013,6 +1016,7 @@ describe('PostgreSQL workspace teams foundation', () => {
       { name: '0003_c05_organizations_workspaces', status: 'applied' },
       { name: '0004_c06_workspace_memberships_rbac', status: 'applied' },
       { name: '0005_c07_teams', status: 'applied' },
+      { name: '0006_c08_channels', status: 'applied' },
     ]);
   });
 });

@@ -110,6 +110,7 @@ describe('AccessService', () => {
         'membership.read',
         'team.read',
         'team.manage',
+        'channel.read',
       ],
     });
     mocks.resolveWorkspaceAccess.mockResolvedValue(undefined);

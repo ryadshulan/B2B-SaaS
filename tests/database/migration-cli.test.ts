@@ -104,6 +104,7 @@ describe('built migration CLI output contract', () => {
       { name: '0003_c05_organizations_workspaces', status: 'applied' },
       { name: '0004_c06_workspace_memberships_rbac', status: 'applied' },
       { name: '0005_c07_teams', status: 'applied' },
+      { name: '0006_c08_channels', status: 'applied' },
     ]);
     expect(result.stdout).not.toContain('database.pool.created');
     expect(result.stdout).not.toContain('database.pool.closed');

@@ -324,6 +324,9 @@ describe('PostgreSQL organization and workspace tenancy foundation', () => {
     const migrationOptions = { migrationTableSchema: schema };
     try {
       await expect(migrateDown(database, migrationOptions)).resolves.toMatchObject({
+        migrations: ['0006_c08_channels'],
+      });
+      await expect(migrateDown(database, migrationOptions)).resolves.toMatchObject({
         migrations: ['0005_c07_teams'],
       });
       await expect(migrateDown(database, migrationOptions)).resolves.toMatchObject({
@@ -361,6 +364,7 @@ describe('PostgreSQL organization and workspace tenancy foundation', () => {
       { name: '0003_c05_organizations_workspaces', status: 'applied' },
       { name: '0004_c06_workspace_memberships_rbac', status: 'applied' },
       { name: '0005_c07_teams', status: 'applied' },
+      { name: '0006_c08_channels', status: 'applied' },
     ]);
   });
 });

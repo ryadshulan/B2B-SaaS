@@ -11,6 +11,7 @@ describe('database migration registry', () => {
       '0003_c05_organizations_workspaces',
       '0004_c06_workspace_memberships_rbac',
       '0005_c07_teams',
+      '0006_c08_channels',
     ]);
     expect(Object.keys(migrations).sort()).toStrictEqual(registeredMigrationNames);
     expect(registeredMigrationNames.every((name) => /^\d{4}_[a-z0-9_]+$/u.test(name))).toBe(true);
@@ -23,6 +24,7 @@ describe('database migration registry', () => {
     const tenancy = migrations['0003_c05_organizations_workspaces'];
     const access = migrations['0004_c06_workspace_memberships_rbac'];
     const teams = migrations['0005_c07_teams'];
+    const channels = migrations['0006_c08_channels'];
 
     expect(typeof baseline?.up).toBe('function');
     expect(typeof baseline?.down).toBe('function');
@@ -34,5 +36,7 @@ describe('database migration registry', () => {
     expect(typeof access?.down).toBe('function');
     expect(typeof teams?.up).toBe('function');
     expect(typeof teams?.down).toBe('function');
+    expect(typeof channels?.up).toBe('function');
+    expect(typeof channels?.down).toBe('function');
   });
 });

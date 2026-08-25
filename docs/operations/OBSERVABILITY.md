@@ -53,7 +53,7 @@ The logger censors common credentials recursively before serialization. This inc
 
 ## Request context
 
-C06 does not mutate the C01 AsyncLocalStorage contract. Verified workspace access is attached type-safely to the individual HTTP request after membership resolution. C07 does not add team or team-membership selection to authentication, session, `WorkspaceAccessContext`, or AsyncLocalStorage. No client-supplied workspace/team value enters logger context, and authentication/session records remain workspace-agnostic. If future logging enrichment adds workspace metadata, it must occur only after the C06 resolution and preserve concurrent request isolation.
+C06 does not mutate the C01 AsyncLocalStorage contract. Verified workspace access is attached type-safely to the individual HTTP request after membership resolution. C07 and C08 do not add team, team-membership, Channel, provider, or external-reference selection to authentication, session, `WorkspaceAccessContext`, or AsyncLocalStorage. No client-supplied workspace/team/channel/provider value enters logger context, and authentication/session records remain workspace-agnostic. If future logging enrichment adds workspace metadata, it must occur only after the C06 resolution and preserve concurrent request isolation.
 
 The API creates an internal UUID request ID for every request and never trusts an inbound `x-request-id`. A valid inbound `x-correlation-id` is preserved; a missing or invalid value is replaced with a UUID. Valid correlation IDs are 1–128 characters from `[A-Za-z0-9._:-]`. Both IDs are returned as response headers and stored in AsyncLocalStorage so ordinary await chains and logger calls retain the correct context without a global mutable request object.
 
@@ -64,6 +64,13 @@ HTTP completion records contain only `method`, query-free `path`, `status_code`,
 Known application errors and Nest HTTP exceptions share the documented API error envelope. Unknown exceptions are logged with internal error serialization and return only a generic 500 response. Client responses never include stack traces or raw exception objects.
 
 C07 adds no new required operational log event or configuration variable. Team code never logs request bodies, team-member payloads, SQL parameters, database errors, or credentials; safe HTTP errors expose only fixed codes/messages. The API remains independent from Redis, and the worker receives no team job or payload in C07.
+
+C08 adds no required configuration variable or production provider. Channel code emits no persistence
+logs. Future optional lifecycle events may use `channel.created_pending`, `channel.identity_bound`,
+`channel.disabled`, and `channel.reactivated` with only server-established `workspace_id`, `channel_id`,
+`provider_key`, and `status`. Raw `external_ref`, tokens, credentials, cookies, passwords, SQL parameters,
+and provider payloads are prohibited. The API remains independent from Redis/storage and the worker has
+no channel job.
 
 `GET /health` is liveness and always reports only `{ "status": "ok" }` while the process can serve HTTP. `GET /ready` performs a fresh bounded PostgreSQL `SELECT 1`: it reports `{ "status": "ready" }` with HTTP 200 on success or `{ "status": "not_ready" }` with HTTP 503 on failure. No failure details are returned, and recovery requires no process restart.
 

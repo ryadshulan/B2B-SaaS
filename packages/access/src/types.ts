@@ -33,6 +33,8 @@ export const PERMISSIONS = Object.freeze([
   'membership.manage_owner',
   'team.read',
   'team.manage',
+  'channel.read',
+  'channel.manage',
 ] as const);
 
 export type Permission = (typeof PERMISSIONS)[number];

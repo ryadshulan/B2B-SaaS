@@ -20,6 +20,8 @@ const EXPECTED_PERMISSIONS = [
   'membership.manage_owner',
   'team.read',
   'team.manage',
+  'channel.read',
+  'channel.manage',
 ] as const;
 
 const EXPECTED_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly string[]> = {
@@ -33,6 +35,8 @@ const EXPECTED_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly string[]> = {
     'membership.manage',
     'team.read',
     'team.manage',
+    'channel.read',
+    'channel.manage',
   ],
   supervisor: [
     'organization.read',
@@ -40,10 +44,11 @@ const EXPECTED_ROLE_PERMISSIONS: Record<WorkspaceRole, readonly string[]> = {
     'membership.read',
     'team.read',
     'team.manage',
+    'channel.read',
   ],
-  agent: ['workspace.read', 'team.read'],
-  marketing: ['workspace.read', 'team.read'],
-  analyst: ['workspace.read', 'team.read'],
+  agent: ['workspace.read', 'team.read', 'channel.read'],
+  marketing: ['workspace.read', 'team.read', 'channel.read'],
+  analyst: ['workspace.read', 'team.read', 'channel.read'],
 };
 
 describe('workspace role permission policy', () => {
@@ -78,7 +83,11 @@ describe('workspace role permission policy', () => {
       agentPermissions[0] = 'membership.manage';
     }).toThrow(TypeError);
 
-    expect(ROLE_PERMISSIONS.agent).toStrictEqual(['workspace.read', 'team.read']);
+    expect(ROLE_PERMISSIONS.agent).toStrictEqual([
+      'workspace.read',
+      'team.read',
+      'channel.read',
+    ]);
     expect(roleHasPermission('agent', 'membership.manage')).toBe(false);
   });
 
@@ -121,6 +130,15 @@ describe('workspace role permission policy', () => {
       expect(roleHasPermission(role, 'team.read')).toBe(true);
       expect(roleHasPermission(role, 'team.manage')).toBe(
         role === 'owner' || role === 'admin' || role === 'supervisor',
+      );
+    }
+  });
+
+  it('grants channel management only to owner and admin while every role can read', () => {
+    for (const role of WORKSPACE_ROLES) {
+      expect(roleHasPermission(role, 'channel.read')).toBe(true);
+      expect(roleHasPermission(role, 'channel.manage')).toBe(
+        role === 'owner' || role === 'admin',
       );
     }
   });

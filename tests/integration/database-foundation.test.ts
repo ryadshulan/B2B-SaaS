@@ -206,6 +206,7 @@ describe('PostgreSQL database foundation', () => {
       { name: '0003_c05_organizations_workspaces', status: 'pending' },
       { name: '0004_c06_workspace_memberships_rbac', status: 'pending' },
       { name: '0005_c07_teams', status: 'pending' },
+      { name: '0006_c08_channels', status: 'pending' },
     ]);
     await expect(migrateToLatest(runtime, options)).resolves.toMatchObject({
       direction: 'latest',
@@ -215,6 +216,7 @@ describe('PostgreSQL database foundation', () => {
         '0003_c05_organizations_workspaces',
         '0004_c06_workspace_memberships_rbac',
         '0005_c07_teams',
+        '0006_c08_channels',
       ],
     });
     expect(await getMigrationStatus(runtime, options)).toMatchObject([
@@ -223,19 +225,21 @@ describe('PostgreSQL database foundation', () => {
       { name: '0003_c05_organizations_workspaces', status: 'applied' },
       { name: '0004_c06_workspace_memberships_rbac', status: 'applied' },
       { name: '0005_c07_teams', status: 'applied' },
+      { name: '0006_c08_channels', status: 'applied' },
     ]);
     await expect(migrateToLatest(runtime, options)).resolves.toMatchObject({ migrations: [] });
 
     await expect(migrateDown(runtime, options)).resolves.toMatchObject({
       direction: 'down',
-      migrations: ['0005_c07_teams'],
+      migrations: ['0006_c08_channels'],
     });
     expect(await getMigrationStatus(runtime, options)).toStrictEqual([
       expect.objectContaining({ name: '0001_c02_database_baseline', status: 'applied' }),
       expect.objectContaining({ name: '0002_c04_authentication_foundation', status: 'applied' }),
       expect.objectContaining({ name: '0003_c05_organizations_workspaces', status: 'applied' }),
       expect.objectContaining({ name: '0004_c06_workspace_memberships_rbac', status: 'applied' }),
-      { name: '0005_c07_teams', status: 'pending' },
+      expect.objectContaining({ name: '0005_c07_teams', status: 'applied' }),
+      { name: '0006_c08_channels', status: 'pending' },
     ]);
 
     await Promise.all([migrateToLatest(runtime, options), migrateToLatest(runtime, options)]);
@@ -245,6 +249,7 @@ describe('PostgreSQL database foundation', () => {
       { name: '0003_c05_organizations_workspaces', status: 'applied' },
       { name: '0004_c06_workspace_memberships_rbac', status: 'applied' },
       { name: '0005_c07_teams', status: 'applied' },
+      { name: '0006_c08_channels', status: 'applied' },
     ]);
 
     const metadataTables = await sql<{ table_name: string }>`
@@ -256,6 +261,7 @@ describe('PostgreSQL database foundation', () => {
     expect(metadataTables.rows.map((row) => row.table_name)).toStrictEqual([
       'auth_password_credentials',
       'auth_sessions',
+      'channels',
       'kysely_migration',
       'kysely_migration_lock',
       'organizations',
