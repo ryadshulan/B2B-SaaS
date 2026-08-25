@@ -2,7 +2,7 @@
 
 ## Technology and ownership
 
-PostgreSQL is the system of record. `@customer-ops/database` owns the `pg` pool, Kysely executor, transaction helper, health check, migrations, and shutdown behavior. Applications receive its typed runtime through infrastructure providers and must not instantiate pools or expose raw driver access. C04 owns global authentication tables. C05 adds organization/account and workspace tenant entities. C06 adds workspace membership persistence. C07 adds workspace teams and team memberships without changing C04/C05 columns or C06 membership columns.
+PostgreSQL is the system of record. `@customer-ops/database` owns the `pg` pool, Kysely executor, transaction helper, health check, migrations, and shutdown behavior. Applications receive its typed runtime through infrastructure providers and must not instantiate pools or expose raw driver access. C04 owns global authentication tables. C05 adds organization/account and workspace tenant entities. C06 adds workspace membership persistence. C07 adds workspace teams and team memberships. C08 adds workspace Channels without changing C04-C07 columns or constraints.
 
 The API creates one lazy pool per process after configuration validation. Temporary PostgreSQL unavailability does not prevent HTTP startup: liveness remains available and readiness stays `503` until the database recovers. Nest shutdown closes the pool; close is safe to repeat. The worker has no database workload in C02 and does not require database configuration.
 
@@ -39,6 +39,14 @@ Migrations live in `packages/database/src/migrations` and use immutable sortable
 
 `0005_c07_teams` adds the named `workspace_memberships_id_workspace_unique` composite key, then creates `teams` and `team_memberships`. Team names are unique by exact normalized `(workspace_id, name)`, team memberships are unique by `(team_id, workspace_membership_id)`, and both status columns accept only `active` or `disabled`. Restrictive composite foreign keys bind team memberships to `(teams.id, teams.workspace_id)` and `(workspace_memberships.id, workspace_memberships.workspace_id)`, so direct cross-workspace relationships fail. Down drops team memberships, teams, and only the C07-added composite key, preserving all C06 rows and constraints. Once applied anywhere, a migration is never edited—corrections use a new migration.
 
+`0006_c08_channels` creates `channels` with restrictive workspace ownership, exact
+`pending`/`active`/`disabled` status, an active-requires-external-identity check, and the named composite
+unique constraint `channels_id_workspace_unique` for future same-workspace composite foreign keys.
+The partial unique index `channels_provider_external_ref_unique` applies globally to
+`(provider_key, external_ref)` when the reference is non-null. It is the authoritative concurrent claim
+control and remains effective for disabled rows. `channels_workspace_status_idx` supports scoped status
+queries. Down drops only `channels`, including its owned indexes and constraints, and preserves C07.
+
 Kysely migration execution is transactionally locked with a bounded PostgreSQL advisory lock, preventing concurrent processes from racing. The CLI binds its migration metadata to PostgreSQL's current schema so disposable-schema verification cannot discover metadata from another schema on the search path. Production API startup never runs migrations. Deployments run `pnpm db:migrate:latest` as an explicit release step, check `pnpm db:migrate:status`, and only then declare the release ready. Migration failures exit non-zero and log safe event metadata without connection strings, SQL, or parameters.
 
 ## Readiness and failures
@@ -58,8 +66,15 @@ C06 resolves workspace access with parameter-bound joins across active user, mem
 
 C07 team repositories live in `@customer-ops/teams`, bind to a supplied Kysely executor or transaction, and require explicit workspace scope for every tenant lookup or update. Team membership references a same-workspace C06 membership and never authorizes access. Adding or reactivating a team member uses a narrowly scoped transaction-bound team lookup with `SELECT ... FOR SHARE`, serializing the active-team check against concurrent status updates; ordinary reads remain nonlocking. Named PostgreSQL uniqueness constraints, not check-then-insert logic, settle concurrent team-name and team-member races. Teams and memberships are disabled rather than deleted.
 
+C08 channel repositories live in `@customer-ops/channels` and bind to a supplied Kysely executor.
+Every ID lookup/update and list requires explicit workspace scope. Identity binding uses an atomic
+set-only-while-null predicate; the named global unique index settles cross-channel/workspace races, and
+only a `23505` naming that index maps to the safe identity conflict. The sole unscoped lookup is
+explicitly named for internal provider routing and must never authorize access. Channels are disabled,
+not deleted, and disabling does not release external identity.
+
 Future workspace-owned operational tables must include `workspace_id`. Their repositories must require explicit workspace scope from trusted authenticated application context and may not expose unscoped `findById(id)`-style access. Frontend-supplied workspace IDs are not authorization. PostgreSQL row-level security will be added as defense in depth after server-side membership resolution; it does not replace application authorization and scoped queries. Controllers never perform raw database access.
 
 ## Test isolation
 
-Database integration tests use the configured PostgreSQL instance but create only cryptographically unique `c02_migration_*`, `c02_transaction_*`, `c04_auth_*`, `c04_cli_*`, `c05_tenancy_*`, `c06_access_*`, `c06_accessdb_*`, `c07_teams_*`, and `c07_teamsdb_*` schemas. Cleanup validates those prefixes before dropping the disposable schemas. Tests never issue `DROP DATABASE`, reset shared schemas, or assume SQLite equivalence.
+Database integration tests use the configured PostgreSQL instance but create only cryptographically unique `c02_migration_*`, `c02_transaction_*`, `c04_auth_*`, `c04_cli_*`, `c05_tenancy_*`, `c06_access_*`, `c06_accessdb_*`, `c07_teams_*`, `c07_teamsdb_*`, `c08_channels_*`, and `c08_channelsdb_*` schemas. Cleanup validates those prefixes before dropping the disposable schemas. Tests never issue `DROP DATABASE`, reset shared schemas, or assume SQLite equivalence.

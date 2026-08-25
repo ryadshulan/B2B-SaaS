@@ -20,7 +20,21 @@ Membership writes target an existing active user by normalized email and reject 
 
 C07 team routes reuse the C06 session, workspace-access, and permission guards. Writes also require exact `WEB_ORIGIN`. Team repositories have no unscoped team lookup: every team identifier is resolved with the verified current workspace, and team-membership identifiers are additionally scoped by team. Add-member bodies accept only a `workspaceMembershipId`, never a `userId`. Other-workspace, nonexistent, inactive-membership, and inactive-user targets share `team_member_unavailable`; cross-workspace and nonexistent team IDs share `team_not_found`.
 
-PostgreSQL composite foreign keys enforce that both a team and its referenced workspace membership match `team_memberships.workspace_id`, even for direct writes that bypass the service. Named unique constraints settle concurrent normalized-name and duplicate-member races. Team membership never grants workspace access or contributes to RBAC, and disabling teams or team memberships cannot alter C06 access. No hard delete, team roles, channels, routing, Redis team dependency, or C08+ provider behavior is introduced.
+PostgreSQL composite foreign keys enforce that both a team and its referenced workspace membership match `team_memberships.workspace_id`, even for direct writes that bypass the service. Named unique constraints settle concurrent normalized-name and duplicate-member races. Team membership never grants workspace access or contributes to RBAC, and disabling teams or team memberships cannot alter C06 access. The C07 team module itself introduces no hard delete, team roles, routing, Redis dependency, or provider behavior.
+
+C08 channel reads reuse the C06 session, workspace-access, and permission guards with `channel.read`.
+Every public channel identifier is resolved with the verified workspace, and other-workspace and
+nonexistent UUIDs share `channel_not_found`. Responses expose only a boolean identity-presence flag;
+raw external references are internal routing identifiers and remain out of public JSON and logs. C08
+has no public write or provider-routing route.
+
+The one global `(provider_key, external_ref)` resolver is explicitly internal infrastructure. It is not
+authorization and derives the owning workspace only from PostgreSQL's server-owned mapping. The named
+partial unique index prevents one provider identity mapping to multiple workspaces, including under
+concurrent claims. Disabled Channels retain their identity claim and remain resolvable so future intake
+must make an explicit status decision. C08 stores no provider token, credential, secret, OAuth state,
+webhook payload, contact, conversation, or message, performs no provider network call, and adds no
+Redis or storage dependency.
 
 Request IDs are always generated internally. Correlation IDs are strictly bounded and character-validated to prevent control-character or log injection. Neither identifier establishes identity, authorization, workspace scope, or RBAC.
 

@@ -73,6 +73,7 @@ jobs:
       - run: pnpm test:tenancy
       - run: pnpm test:access
       - run: pnpm test:teams
+      - run: pnpm test:channels
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

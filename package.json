@@ -20,6 +20,7 @@
     "test:tenancy": "turbo build --filter=@customer-ops/tenancy --filter=@customer-ops/database && vitest run --config vitest.tenancy.config.ts",
     "test:access": "turbo build --filter=@customer-ops/access --filter=@customer-ops/api --filter=@customer-ops/database && vitest run --config vitest.access.config.ts",
     "test:teams": "turbo build --filter=@customer-ops/teams --filter=@customer-ops/api --filter=@customer-ops/database && vitest run --config vitest.teams.config.ts",
+    "test:channels": "turbo build --filter=@customer-ops/channels --filter=@customer-ops/api --filter=@customer-ops/database && vitest run --config vitest.channels.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:security": "vitest run --config vitest.security.config.ts",
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@customer-ops/access": "workspace:*",
     "@customer-ops/auth": "workspace:*",
+    "@customer-ops/channels": "workspace:*",
     "@customer-ops/config": "workspace:*",
     "@customer-ops/database": "workspace:*",
     "@customer-ops/logger": "workspace:*",

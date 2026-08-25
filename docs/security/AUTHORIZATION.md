@@ -10,18 +10,23 @@ The verified request context contains safe identity and authorization fields: us
 
 ## Built-in roles and permissions
 
-| Role       | organization.read | organization.update | workspace.read | workspace.update | membership.read | membership.manage | membership.manage_owner | team.read | team.manage |
-| ---------- | ----------------- | ------------------- | -------------- | ---------------- | --------------- | ----------------- | ----------------------- | --------- | ----------- |
-| owner      | yes               | yes                 | yes            | yes              | yes             | yes               | yes                     | yes       | yes         |
-| admin      | yes               | yes                 | yes            | yes              | yes             | yes               | no                      | yes       | yes         |
-| supervisor | yes               | no                  | yes            | no               | yes             | no                | no                      | yes       | yes         |
-| agent      | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          |
-| marketing  | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          |
-| analyst    | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          |
+| Role       | organization.read | organization.update | workspace.read | workspace.update | membership.read | membership.manage | membership.manage_owner | team.read | team.manage | channel.read | channel.manage |
+| ---------- | ----------------- | ------------------- | -------------- | ---------------- | --------------- | ----------------- | ----------------------- | --------- | ----------- | ------------ | -------------- |
+| owner      | yes               | yes                 | yes            | yes              | yes             | yes               | yes                     | yes       | yes         | yes          | yes            |
+| admin      | yes               | yes                 | yes            | yes              | yes             | yes               | no                      | yes       | yes         | yes          | yes            |
+| supervisor | yes               | no                  | yes            | no               | yes             | no                | no                      | yes       | yes         | yes          | no             |
+| agent      | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          | yes          | no             |
+| marketing  | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          | yes          | no             |
+| analyst    | no                | no                  | yes            | no               | no              | no                | no                      | yes       | no          | yes          | no             |
 
 The mapping is explicit, not a numeric hierarchy. Unknown role or permission values fail closed. Only `membership.manage_owner` may assign, promote, demote, disable, or otherwise alter an owner-level membership. Custom roles and persisted role/permission tables are deferred.
 
 The C07 extension adds exactly `team.read` and `team.manage`. Every built-in role may read teams. Only owner, admin, and supervisor may create or update teams and manage team memberships. The permission catalog, role catalog, mapping object, and every nested permission array remain runtime-frozen.
+
+The C08 extension adds exactly `channel.read` and `channel.manage`. Every built-in role may read
+workspace Channels. Only owner and admin receive `channel.manage`; C08 deliberately reserves it
+without exposing public management routes. Provider keys, external references, channel IDs, and the
+internal global provider resolver never grant workspace access or a permission.
 
 ## Membership management
 
@@ -43,4 +48,5 @@ Adding or reactivating a team member requires an active team, active target work
 
 PostgreSQL is the membership and authorization source of truth. Future operational records will carry `workspace_id`. Future row-level security may add defense in depth using server-derived context, but it will not accept a client workspace selector or replace application authorization.
 
-Invitations, email delivery, custom roles, organization memberships, team roles, channels, and routing/assignment are deferred.
+Invitations, email delivery, custom roles, organization memberships, team roles, provider management,
+channel routing/assignment, and other C09+ authorization are deferred.

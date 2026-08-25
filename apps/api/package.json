@@ -12,6 +12,7 @@
   "dependencies": {
     "@customer-ops/access": "workspace:*",
     "@customer-ops/auth": "workspace:*",
+    "@customer-ops/channels": "workspace:*",
     "@customer-ops/config": "workspace:*",
     "@customer-ops/database": "workspace:*",
     "@customer-ops/logger": "workspace:*",

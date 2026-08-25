@@ -85,8 +85,8 @@ describe('C07 teams security boundaries', () => {
     expect(accessPolicy).not.toMatch(/TeamMembership|teamMembershipId/iu);
   });
 
-  it('introduces no C08 channels/messages/WhatsApp, routing, team roles, hard delete, or team queue dependency', async () => {
-    for (const directory of ['packages/channels', 'packages/messages']) {
+  it('keeps C07 teams free of messages, real providers, routing, team roles, hard delete, and queue dependencies', async () => {
+    for (const directory of ['packages/messages']) {
       await expect(access(directory)).rejects.toBeDefined();
     }
     const files = [

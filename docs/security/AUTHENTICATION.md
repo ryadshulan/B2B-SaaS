@@ -2,7 +2,7 @@
 
 ## Identity and credential model
 
-C04 users remain global identities after C05 introduces organization/workspace records, C06 introduces memberships, and C07 introduces teams. Users, authenticated principals, and sessions do not carry a workspace, organization, membership, team, team membership, role, or permission, and organization/workspace rows contain no owner user. A valid session proves only the global user identity. C06 tenant routes independently resolve an active workspace membership, authorize explicit permissions, and scope every repository call. Switching the requested workspace or team operations never changes the session or cookie.
+C04 users remain global identities after C05 introduces organization/workspace records, C06 introduces memberships, C07 introduces teams, and C08 introduces Channels. Users, authenticated principals, and sessions do not carry a workspace, organization, membership, team, team membership, Channel, provider key, external reference, role, or permission, and organization/workspace rows contain no owner user. A valid session proves only the global user identity. C06 tenant routes independently resolve an active workspace membership, authorize explicit permissions, and scope every repository call. Switching the requested workspace or reading a team/Channel never changes the session or cookie.
 
 Registration trims only outer email whitespace, validates a maximum of 254 characters, stores the display email, and stores a separate lowercase lookup value. PostgreSQL's unique `email_normalized` constraint is the final duplicate-race control. Passwords are 12 through 256 Unicode code points, are not trimmed or normalized, and are hashed before the registration transaction where practical.
 

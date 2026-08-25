@@ -1,4 +1,4 @@
-import { access, readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -207,17 +207,14 @@ describe('C06 access security boundaries', () => {
     expect(policy).toMatch(/ROLE_PERMISSIONS/u);
   });
 
-  it('introduces no C08 channels/messages, business jobs, or client-controlled RLS', async () => {
-    for (const directory of ['packages/channels', 'packages/messages']) {
-      await expect(access(directory)).rejects.toBeDefined();
-    }
+  it('keeps C06 free of C08 channel persistence, messages, business jobs, and client-controlled RLS', async () => {
     const files = [
       ...(await findSourceFiles('packages/access/src')),
       ...(await findSourceFiles('apps/api/src/access')),
       'packages/database/src/migrations/0004_c06_workspace_memberships_rbac.ts',
     ];
     const sources = (await Promise.all(files.map((file) => readFile(file, 'utf8')))).join('\n');
-    expect(sources).not.toMatch(/bullmq|ioredis|team_id|channel_id|message_id|whatsapp|webhook/iu);
+    expect(sources).not.toMatch(/bullmq|ioredis|team_id|channel_id|message_id|webhook/iu);
     expect(sources).not.toMatch(/set_config|row_security|create policy/iu);
     expect(ownerId).not.toBe(outsiderId);
   });

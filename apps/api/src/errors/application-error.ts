@@ -24,7 +24,13 @@ export type ApplicationErrorCode =
   | 'team_disabled'
   | 'team_member_unavailable'
   | 'team_membership_not_found'
-  | 'team_membership_conflict';
+  | 'team_membership_conflict'
+  | 'channel_not_found'
+  | 'channel_external_identity_conflict'
+  | 'channel_external_identity_already_bound'
+  | 'channel_external_identity_required'
+  | 'channel_invalid_state'
+  | 'channel_provider_not_registered';
 
 export interface ApplicationErrorOptions {
   code: ApplicationErrorCode;

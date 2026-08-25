@@ -16,6 +16,18 @@ C06 unit tests cover all six roles, the exact permission matrix, fail-closed unk
 
 C07 unit tests cover Arabic/Unicode names, trimming, NFC, code-point limits, control characters, statuses, safe errors, scoped repository/service contracts, no team roles, the exact two-permission RBAC extension, and runtime freeze regressions. `pnpm test:teams` builds the teams/database/API dependency graph and runs C07 unit, strict HTTP validation, real PostgreSQL, E2E, and structural security suites. Its generated `c07_teamsdb_*` and `c07_teams_*` schemas verify the team tables, status/unique constraints, both composite foreign keys, direct cross-workspace rejection, Arabic/NFC persistence, scoped CRUD, effective membership, disabled upstream states, both real uniqueness races, C04/C05/C06 regressions, and exact latest/down/latest removal and restoration. Deterministic add/disable and reactivate/disable tests use independent real PostgreSQL transactions and observed blocker PIDs to prove both activation-first and disable-first serialization without timing sleeps. Cleanup validates the C07-owned prefix and drops only that generated schema.
 
+C08 unit tests cover Arabic/Unicode and NFC display names, code-point/control limits, provider-key
+grammar, opaque external-reference preservation, runtime-frozen provider descriptors, duplicate and
+unknown registry behavior, scoped lifecycle services, safe errors, idempotent same-identity binding,
+and the exact frozen RBAC extension. `pnpm test:channels` builds channels/database/API and runs unit,
+real PostgreSQL, E2E, and structural security suites. Generated `c08_channelsdb_*` and `c08_channels_*`
+schemas prove exact migration structure, restrictive workspace ownership, the global partial identity
+index, null/different-provider behavior, disabled identity reservation, cross-workspace isolation,
+internal disabled-route resolution, and a real simultaneous cross-workspace identity claim with exactly
+one safe conflict. It also verifies C04-C07 schema preservation and exact latest/down/latest behavior.
+Public E2E tests cover both GET routes for authentication, workspace selection, all roles, isolation,
+indistinguishable not-found responses, safe response fields, and absence of C08 write/onboarding routes.
+
 When fixed local Compose ports are occupied, C06 database tests may use a disposable PostgreSQL container mapped to a dynamic loopback port. Tests still use only generated owned schemas, validate the ownership prefix before cleanup, and never stop unrelated services.
 
 Future tests must emphasize tenant-crossing denial, RBAC denial, validation failures, idempotency, retries, provider adapter contracts, and database transaction behavior. Prefer deterministic tests; introduce containers and fixtures only with the infrastructure they validate.
