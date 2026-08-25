@@ -19,6 +19,10 @@ export interface TeamUpdate {
 export interface TeamRepository {
   insertTeam(team: Team): Promise<void>;
   findTeamWithinWorkspace(workspaceId: WorkspaceId, teamId: TeamId): Promise<Team | undefined>;
+  findTeamWithinWorkspaceForMembershipActivation(
+    workspaceId: WorkspaceId,
+    teamId: TeamId,
+  ): Promise<Team | undefined>;
   listTeamsWithinWorkspace(workspaceId: WorkspaceId): Promise<readonly Team[]>;
   updateTeamWithinWorkspace(
     workspaceId: WorkspaceId,

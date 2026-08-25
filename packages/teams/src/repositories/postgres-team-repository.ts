@@ -85,6 +85,20 @@ class PostgresTeamRepository implements TeamRepository {
     return row === undefined ? undefined : toTeam(row);
   }
 
+  async findTeamWithinWorkspaceForMembershipActivation(
+    workspaceId: WorkspaceId,
+    teamId: TeamId,
+  ): Promise<Team | undefined> {
+    const row = await this.executor
+      .selectFrom('teams')
+      .selectAll()
+      .where('workspace_id', '=', workspaceId)
+      .where('id', '=', teamId)
+      .forShare()
+      .executeTakeFirst();
+    return row === undefined ? undefined : toTeam(row);
+  }
+
   async listTeamsWithinWorkspace(workspaceId: WorkspaceId): Promise<readonly Team[]> {
     const rows = await this.executor
       .selectFrom('teams')

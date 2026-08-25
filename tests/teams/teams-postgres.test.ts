@@ -15,17 +15,20 @@ import {
   getMigrationStatus,
   migrateDown,
   migrateToLatest,
+  withTransaction,
   type DatabaseRuntime,
 } from '@customer-ops/database';
 import {
   createPostgresTeamRepository,
   createPostgresTeamService,
   TeamError,
+  TeamService,
   type Team,
   type TeamId,
   type TeamMembership,
   type TeamMembershipId,
   type TeamRepository,
+  type TeamTransactionRunner,
   type TeamsDatabaseSchema,
 } from '@customer-ops/teams';
 import {
@@ -61,12 +64,125 @@ function withSearchPath(databaseUrl: string, schema: string): string {
   return url.toString();
 }
 
+interface Deferred<Value> {
+  readonly promise: Promise<Value>;
+  readonly resolve: (value: Value) => void;
+}
+
+function deferred<Value>(): Deferred<Value> {
+  let resolve: (value: Value) => void = () => undefined;
+  const promise = new Promise<Value>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('PostgreSQL workspace teams foundation', () => {
   const schema = disposableSchema();
   let adminDatabase: DatabaseRuntime;
   let database: DatabaseRuntime<TestDatabaseSchema>;
   let accessRepository: AccessRepository;
   let teamRepository: TeamRepository;
+
+  function coordinatedTransactionRunner(options: {
+    readonly backendPid?: Deferred<number>;
+    readonly activationLockAcquired?: Deferred<void>;
+    readonly continueAfterActivationLock?: Promise<void>;
+  }): TeamTransactionRunner {
+    return {
+      run: (operation) =>
+        withTransaction(database, async (transaction) => {
+          if (options.backendPid !== undefined) {
+            const result = await sql<{ pid: number }>`
+              select pg_backend_pid() as pid
+            `.execute(transaction);
+            const pid = result.rows[0]?.pid;
+            if (pid === undefined) throw new Error('PostgreSQL backend PID was unavailable');
+            options.backendPid.resolve(pid);
+          }
+
+          const repository = createPostgresTeamRepository(transaction);
+          if (options.activationLockAcquired === undefined) return operation(repository);
+
+          const coordinatedRepository = Object.create(repository) as TeamRepository;
+          coordinatedRepository.findTeamWithinWorkspaceForMembershipActivation = async (
+            workspaceId,
+            teamId,
+          ) => {
+            const team = await repository.findTeamWithinWorkspaceForMembershipActivation(
+              workspaceId,
+              teamId,
+            );
+            options.activationLockAcquired?.resolve(undefined);
+            await options.continueAfterActivationLock;
+            return team;
+          };
+          return operation(coordinatedRepository);
+        }),
+    };
+  }
+
+  function coordinatedTeamService(
+    options: Parameters<typeof coordinatedTransactionRunner>[0],
+  ): TeamService {
+    return new TeamService({
+      repository: teamRepository,
+      transactions: coordinatedTransactionRunner(options),
+    });
+  }
+
+  async function backendBlockingCount(backendPid: number): Promise<number> {
+    const result = await sql<{ blockerCount: number }>`
+      select cardinality(pg_blocking_pids(${backendPid}))::integer as "blockerCount"
+    `.execute(database.executor);
+    const blockerCount = result.rows[0]?.blockerCount;
+    if (blockerCount === undefined) {
+      throw new Error('PostgreSQL blocking state was unavailable');
+    }
+    return blockerCount;
+  }
+
+  async function waitForBackendToBlock(backendPid: number): Promise<void> {
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+      if ((await backendBlockingCount(backendPid)) > 0) return;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    throw new Error(`PostgreSQL backend ${backendPid} did not enter a lock wait`);
+  }
+
+  function disableTeamInHeldTransaction(
+    team: Team,
+    updateCompleted: Deferred<void>,
+    commitAllowed: Promise<void>,
+  ): Promise<void> {
+    return withTransaction(database, async (transaction) => {
+      await transaction
+        .updateTable('teams')
+        .set({ status: 'disabled', updated_at: new Date() })
+        .where('workspace_id', '=', team.workspaceId)
+        .where('id', '=', team.id)
+        .executeTakeFirstOrThrow();
+      updateCompleted.resolve(undefined);
+      await commitAllowed;
+    });
+  }
+
+  function disableTeamAndExposeBackend(team: Team, backendPid: Deferred<number>): Promise<void> {
+    return withTransaction(database, async (transaction) => {
+      const result = await sql<{ pid: number }>`
+        select pg_backend_pid() as pid
+      `.execute(transaction);
+      const pid = result.rows[0]?.pid;
+      if (pid === undefined) throw new Error('PostgreSQL backend PID was unavailable');
+      backendPid.resolve(pid);
+      await transaction
+        .updateTable('teams')
+        .set({ status: 'disabled', updated_at: new Date() })
+        .where('workspace_id', '=', team.workspaceId)
+        .where('id', '=', team.id)
+        .executeTakeFirstOrThrow();
+    });
+  }
 
   async function createUser(email: string, status: 'active' | 'disabled' = 'active') {
     const id = randomUUID();
@@ -171,7 +287,7 @@ describe('PostgreSQL workspace teams foundation', () => {
       config: {
         ...config,
         url: withSearchPath(config.url, schema),
-        maxConnections: Math.min(config.maxConnections, 8),
+        maxConnections: Math.max(4, Math.min(config.maxConnections, 8)),
       },
     });
     await migrateToLatest(database, { migrationTableSchema: schema });
@@ -435,6 +551,191 @@ describe('PostgreSQL workspace teams foundation', () => {
     ).resolves.toMatchObject({ status: 'active' });
   });
 
+  it('serializes concurrent add before team disable and leaves the stored member ineffective', async () => {
+    const { workspace } = await createTenant();
+    const user = await createUser(`add-first-${randomUUID()}@example.test`);
+    const workspaceMembership = await createWorkspaceMembership(workspace.id, user.id);
+    const team = await createTeam(workspace.id);
+    const activationLockAcquired = deferred<void>();
+    const continueAfterActivationLock = deferred<void>();
+    const service = coordinatedTeamService({
+      activationLockAcquired,
+      continueAfterActivationLock: continueAfterActivationLock.promise,
+    });
+
+    const addPromise = service.addTeamMember(workspace.id, team.id, {
+      workspaceMembershipId: workspaceMembership.id,
+    });
+    await activationLockAcquired.promise;
+
+    const disableBackendPid = deferred<number>();
+    const disablePromise = disableTeamAndExposeBackend(team, disableBackendPid);
+    const backendPid = await disableBackendPid.promise;
+    let blockingError: Error | undefined;
+    try {
+      await waitForBackendToBlock(backendPid);
+    } catch (error) {
+      blockingError = error instanceof Error ? error : new Error('Lock coordination failed');
+    } finally {
+      continueAfterActivationLock.resolve(undefined);
+    }
+
+    const [added] = await Promise.all([addPromise, disablePromise]);
+    if (blockingError !== undefined) throw blockingError;
+
+    await expect(
+      createPostgresTeamService(database).listTeamMembers(workspace.id, team.id),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: added.id, status: 'active', effective: false }),
+    ]);
+    await expect(
+      teamRepository.insertTeamMembership(
+        directTeamMembership(workspace.id, team.id, workspaceMembership.id),
+      ),
+    ).rejects.toHaveProperty('name', 'DuplicateTeamMembershipPersistenceError');
+  });
+
+  it('rejects concurrent add after team disable wins without committing a member row', async () => {
+    const { workspace } = await createTenant();
+    const user = await createUser(`disable-before-add-${randomUUID()}@example.test`);
+    const workspaceMembership = await createWorkspaceMembership(workspace.id, user.id);
+    const team = await createTeam(workspace.id);
+    const disableUpdated = deferred<void>();
+    const allowDisableCommit = deferred<void>();
+    const disablePromise = disableTeamInHeldTransaction(
+      team,
+      disableUpdated,
+      allowDisableCommit.promise,
+    );
+    await disableUpdated.promise;
+
+    const activationBackendPid = deferred<number>();
+    const service = coordinatedTeamService({ backendPid: activationBackendPid });
+    const addResultPromise = Promise.allSettled([
+      service.addTeamMember(workspace.id, team.id, {
+        workspaceMembershipId: workspaceMembership.id,
+      }),
+    ]);
+    const backendPid = await activationBackendPid.promise;
+    let blockingError: Error | undefined;
+    try {
+      await waitForBackendToBlock(backendPid);
+    } catch (error) {
+      blockingError = error instanceof Error ? error : new Error('Lock coordination failed');
+    } finally {
+      allowDisableCommit.resolve(undefined);
+    }
+
+    await disablePromise;
+    const [addResult] = await addResultPromise;
+    if (blockingError !== undefined) throw blockingError;
+    if (addResult?.status !== 'rejected') {
+      throw new Error('Concurrent add unexpectedly succeeded after team disable');
+    }
+    expect(addResult.reason).toBeInstanceOf(TeamError);
+    expect(addResult.reason).toMatchObject({ code: 'team_disabled' });
+    await expect(
+      database.executor
+        .selectFrom('team_memberships')
+        .select('id')
+        .where('workspace_id', '=', workspace.id)
+        .where('team_id', '=', team.id)
+        .where('workspace_membership_id', '=', workspaceMembership.id)
+        .execute(),
+    ).resolves.toStrictEqual([]);
+  });
+
+  it('serializes concurrent reactivation before team disable and computes effective false', async () => {
+    const { workspace } = await createTenant();
+    const user = await createUser(`reactivate-first-${randomUUID()}@example.test`);
+    const workspaceMembership = await createWorkspaceMembership(workspace.id, user.id);
+    const team = await createTeam(workspace.id);
+    const teamMembership = directTeamMembership(workspace.id, team.id, workspaceMembership.id);
+    teamMembership.status = 'disabled';
+    await teamRepository.insertTeamMembership(teamMembership);
+    const activationLockAcquired = deferred<void>();
+    const continueAfterActivationLock = deferred<void>();
+    const service = coordinatedTeamService({
+      activationLockAcquired,
+      continueAfterActivationLock: continueAfterActivationLock.promise,
+    });
+
+    const reactivatePromise = service.updateTeamMember(workspace.id, team.id, teamMembership.id, {
+      status: 'active',
+    });
+    await activationLockAcquired.promise;
+
+    const disableBackendPid = deferred<number>();
+    const disablePromise = disableTeamAndExposeBackend(team, disableBackendPid);
+    const backendPid = await disableBackendPid.promise;
+    let blockingError: Error | undefined;
+    try {
+      await waitForBackendToBlock(backendPid);
+    } catch (error) {
+      blockingError = error instanceof Error ? error : new Error('Lock coordination failed');
+    } finally {
+      continueAfterActivationLock.resolve(undefined);
+    }
+
+    const [reactivated] = await Promise.all([reactivatePromise, disablePromise]);
+    if (blockingError !== undefined) throw blockingError;
+    expect(reactivated).toMatchObject({ id: teamMembership.id, status: 'active' });
+    await expect(
+      createPostgresTeamService(database).listTeamMembers(workspace.id, team.id),
+    ).resolves.toEqual([
+      expect.objectContaining({ id: teamMembership.id, status: 'active', effective: false }),
+    ]);
+  });
+
+  it('rejects concurrent reactivation after team disable wins and preserves disabled status', async () => {
+    const { workspace } = await createTenant();
+    const user = await createUser(`disable-before-reactivate-${randomUUID()}@example.test`);
+    const workspaceMembership = await createWorkspaceMembership(workspace.id, user.id);
+    const team = await createTeam(workspace.id);
+    const teamMembership = directTeamMembership(workspace.id, team.id, workspaceMembership.id);
+    teamMembership.status = 'disabled';
+    await teamRepository.insertTeamMembership(teamMembership);
+    const disableUpdated = deferred<void>();
+    const allowDisableCommit = deferred<void>();
+    const disablePromise = disableTeamInHeldTransaction(
+      team,
+      disableUpdated,
+      allowDisableCommit.promise,
+    );
+    await disableUpdated.promise;
+
+    const activationBackendPid = deferred<number>();
+    const service = coordinatedTeamService({ backendPid: activationBackendPid });
+    const reactivateResultPromise = Promise.allSettled([
+      service.updateTeamMember(workspace.id, team.id, teamMembership.id, { status: 'active' }),
+    ]);
+    const backendPid = await activationBackendPid.promise;
+    let blockingError: Error | undefined;
+    try {
+      await waitForBackendToBlock(backendPid);
+    } catch (error) {
+      blockingError = error instanceof Error ? error : new Error('Lock coordination failed');
+    } finally {
+      allowDisableCommit.resolve(undefined);
+    }
+
+    await disablePromise;
+    const [reactivateResult] = await reactivateResultPromise;
+    if (blockingError !== undefined) throw blockingError;
+    if (reactivateResult?.status !== 'rejected') {
+      throw new Error('Concurrent reactivation unexpectedly succeeded after team disable');
+    }
+    expect(reactivateResult.reason).toBeInstanceOf(TeamError);
+    expect(reactivateResult.reason).toMatchObject({ code: 'team_disabled' });
+    await expect(
+      teamRepository.findTeamMembershipWithinTeamAndWorkspace(
+        workspace.id,
+        team.id,
+        teamMembership.id,
+      ),
+    ).resolves.toMatchObject({ status: 'disabled' });
+  });
+
   it('blocks add/reactivation for disabled teams but leaves rows readable and C06 access unchanged', async () => {
     const { workspace } = await createTenant();
     const ownerUser = await createUser(`team-disabled-owner-${randomUUID()}@example.test`);
@@ -567,6 +868,14 @@ describe('PostgreSQL workspace teams foundation', () => {
     await expect(
       teamRepository.findTeamWithinWorkspace(second.workspace.id, team.id),
     ).resolves.toBeUndefined();
+    await expect(
+      teamRepository.findTeamWithinWorkspaceForMembershipActivation(second.workspace.id, team.id),
+    ).resolves.toBeUndefined();
+    await expect(
+      createPostgresTeamService(database).addTeamMember(second.workspace.id, team.id, {
+        workspaceMembershipId: member.id,
+      }),
+    ).rejects.toMatchObject({ code: 'team_not_found' });
     await expect(
       teamRepository.findTeamMembershipWithinTeamAndWorkspace(
         second.workspace.id,

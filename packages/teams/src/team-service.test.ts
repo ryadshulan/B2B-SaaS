@@ -47,6 +47,9 @@ function fixture(generatedIds: readonly string[] = [teamId, teamMembershipId]) {
     findTeamWithinWorkspace: vi
       .fn<TeamRepository['findTeamWithinWorkspace']>()
       .mockResolvedValue(team()),
+    findTeamWithinWorkspaceForMembershipActivation: vi
+      .fn<TeamRepository['findTeamWithinWorkspaceForMembershipActivation']>()
+      .mockResolvedValue(team()),
     listTeamsWithinWorkspace: vi
       .fn<TeamRepository['listTeamsWithinWorkspace']>()
       .mockResolvedValue([team()]),
@@ -163,6 +166,10 @@ describe('TeamService', () => {
       service.addTeamMember(workspaceId, teamId, { workspaceMembershipId }),
     ).resolves.toStrictEqual(membership());
     expect(transactionRun).toHaveBeenCalledTimes(1);
+    expect(mocks.findTeamWithinWorkspaceForMembershipActivation).toHaveBeenCalledWith(
+      workspaceId,
+      teamId,
+    );
     expect(mocks.resolveEligibleWorkspaceMember).toHaveBeenCalledWith(
       workspaceId,
       workspaceMembershipId,
@@ -182,6 +189,9 @@ describe('TeamService', () => {
   it('keeps disabled teams readable but blocks add and reactivation', async () => {
     const { mocks, service } = fixture();
     mocks.findTeamWithinWorkspace.mockResolvedValue(team({ status: 'disabled' }));
+    mocks.findTeamWithinWorkspaceForMembershipActivation.mockResolvedValue(
+      team({ status: 'disabled' }),
+    );
     await expect(service.getTeam(workspaceId, teamId)).resolves.toMatchObject({
       status: 'disabled',
     });
@@ -202,6 +212,8 @@ describe('TeamService', () => {
     await expect(
       service.updateTeamMember(workspaceId, teamId, teamMembershipId, { status: 'disabled' }),
     ).resolves.toMatchObject({ status: 'disabled' });
+    expect(mocks.findTeamWithinWorkspaceForMembershipActivation).toHaveBeenCalledTimes(1);
+    expect(mocks.findTeamWithinWorkspace).toHaveBeenCalledTimes(1);
     expect(mocks.updateTeamMembershipStatus).toHaveBeenCalledWith(
       workspaceId,
       teamId,

@@ -24,6 +24,8 @@ Teams and team memberships are `active` or `disabled` and have no hard-delete AP
 
 Adding or reactivating requires an active team, an active workspace membership in the current workspace, and an active global user. Other-workspace, nonexistent, disabled-membership, and disabled-user targets all return the same safe `team_member_unavailable` contract. Disabling an existing team-membership row remains allowed if upstream state was later disabled.
 
+Membership activation transactions read the workspace-scoped team row with PostgreSQL `SELECT ... FOR SHARE` before checking its status. A concurrent team-status update therefore waits for an activation that already observed the team as active, while an activation that starts after disable commits observes the disabled status and fails with `team_disabled`. Ordinary team reads and membership-disable updates remain nonlocking. Active upstream workspace-membership and user eligibility retains its own `FOR SHARE` protection.
+
 Effective team membership is true only when the team membership, workspace membership, user, and team are all active. The member-list response exposes these safe upstream statuses and the computed `effective` boolean; it does not turn effective team membership into authorization.
 
 ## Deferred work

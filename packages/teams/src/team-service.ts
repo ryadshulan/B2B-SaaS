@@ -141,7 +141,10 @@ export class TeamService {
   ): Promise<TeamMembership> {
     try {
       return await this.options.transactions.run(async (repository) => {
-        const team = await repository.findTeamWithinWorkspace(workspaceId, teamId);
+        const team = await repository.findTeamWithinWorkspaceForMembershipActivation(
+          workspaceId,
+          teamId,
+        );
         if (team === undefined) throw new TeamError('team_not_found');
         if (team.status === 'disabled') throw new TeamError('team_disabled');
         const eligible = await repository.resolveEligibleWorkspaceMember(
@@ -181,7 +184,10 @@ export class TeamService {
       throw new TeamError('validation_error');
     }
     return this.options.transactions.run(async (repository) => {
-      const team = await repository.findTeamWithinWorkspace(workspaceId, teamId);
+      const team =
+        input.status === 'active'
+          ? await repository.findTeamWithinWorkspaceForMembershipActivation(workspaceId, teamId)
+          : await repository.findTeamWithinWorkspace(workspaceId, teamId);
       if (team === undefined) throw new TeamError('team_not_found');
       const existing = await repository.findTeamMembershipWithinTeamAndWorkspace(
         workspaceId,
